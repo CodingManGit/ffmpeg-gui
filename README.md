@@ -1,4 +1,70 @@
-# FFmpeg GUI Application
+# FFmpeg GUI
+
+A modern desktop application for video conversion using FFmpeg, built with Electron and Vue.js.
+
+## Features
+
+- 📁 **File Explorer**: Browse and select video files from your system
+- 🎬 **Video Queue**: Manage multiple video files for batch processing
+- ⚙️ **Output Directory Configuration**: Select where converted files will be saved
+- 🔄 **Conversion Processing**: Currently implements file copying as a stub (ready for FFmpeg integration)
+- 📊 **Real-time Status Updates**: Track the progress of each file in the queue
+
+## Development
+
+### Setup
+```bash
+npm install
+```
+
+### Development (Vite + Vue.js)
+```bash
+npm run dev
+```
+
+### Build and Run Electron App
+```bash
+# Quick build (for testing)
+npm run dev:electron
+
+# Full build (includes packaging)
+npm run build
+```
+
+### Run Built Application
+```bash
+npm run electron
+```
+
+## Usage
+
+1. **Add Video Files**: Use the file explorer on the left to browse your system and add video files to the processing queue
+2. **Configure Output**: In the conversion settings panel, click "Browse" to select where processed files should be saved
+3. **Start Processing**: Click "Start Conversion" to begin processing files (currently copies files as a stub)
+4. **Monitor Progress**: Watch the status updates for each file in the queue
+
+## Current Implementation
+
+The application currently implements a **stub conversion process** that copies files to the output directory using the system `cp` command. This serves as a foundation for integrating actual FFmpeg conversion functionality.
+
+## Next Steps
+
+- Replace the copy stub with actual FFmpeg conversion commands
+- Add conversion format options (MP4, AVI, etc.)
+- Implement progress tracking for longer conversions
+- Add conversion quality settings
+- Support for audio extraction and conversion
+
+## Architecture
+
+- **Frontend**: Vue.js 3 with TypeScript
+- **Backend**: Electron main process with Node.js
+- **IPC Communication**: Secure communication between renderer and main process
+- **File Operations**: Native file system access with proper error handling
+
+---
+
+# Original Architecture Design Document
 
 This document outlines the architecture and design for a desktop application that provides a user-friendly graphical interface for FFmpeg. The application will allow users to select video files, configure FFmpeg conversion settings (e.g., target format like H.265), and specify an output directory.
 

@@ -27,4 +27,7 @@ contextBridge.exposeInMainWorld('fileSystemAPI', {
   getParentDirectory: (currentPath: string) => ipcRenderer.invoke('get-parent-directory', currentPath),
   checkIfVideoFile: (filePath: string) => ipcRenderer.invoke('check-if-video-file', filePath),
   getFileStats: (filePath: string) => ipcRenderer.invoke('get-file-stats', filePath),
+  selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  copyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke('copy-file', sourcePath, destinationPath),
+  ensureDirectory: (dirPath: string) => ipcRenderer.invoke('ensure-directory', dirPath),
 })

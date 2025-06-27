@@ -6,15 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build && electron-builder",
+    "build:quick": "vue-tsc && vite build",
     "preview": "vite preview",
     "electron": "electron dist-electron/main.js",
-    "electron:dev": "electron ."
+    "electron:dev": "electron .",
+    "dev:electron": "npm run build:quick && npm run electron"
   },
   "dependencies": {
     "vue": "^3.4.21"
   },
   "devDependencies": {
-    "@types/electron": "^1.4.38",
     "@vitejs/plugin-vue": "^5.0.4",
     "electron": "^30.0.1",
     "electron-builder": "^24.13.3",

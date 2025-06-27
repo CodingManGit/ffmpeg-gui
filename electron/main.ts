@@ -1,11 +1,12 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import os from 'node:os'
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
 
-const require = createRequire(import.meta.url)
+const execAsync = promisify(exec)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -26,7 +27,7 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
-let win: BrowserWindow | null
+let win: any
 
 function createWindow() {
   win = new BrowserWindow({
@@ -63,12 +64,12 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
+    createWindow();
   }
 })
 
 app.whenReady().then(() => {
-  createWindow()
+  createWindow();
   
   // IPC handlers for file system operations
   ipcMain.handle('get-directory-contents', async (_event: any, dirPath: string) => {
@@ -132,6 +133,45 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Error getting file stats:', error)
       return null
+    }
+  })
+
+  // Directory selection handler
+  ipcMain.handle('select-directory', async (_event: any) => {
+    try {
+      const result: any = await dialog.showOpenDialog(win!, {
+        properties: ['openDirectory'],
+        title: 'Select Output Directory'
+      })
+      if (result.cancelled || !result.filePaths || result.filePaths.length === 0) {
+        return null
+      }
+      return result.filePaths[0]
+    } catch (error) {
+      console.error('Error selecting directory:', error)
+      return null
+    }
+  })
+
+  // File copy handler (stub for ffmpeg conversion)
+  ipcMain.handle('copy-file', async (_event: any, sourcePath: string, destinationPath: string) => {
+    try {
+      await execAsync(`cp "${sourcePath}" "${destinationPath}"`)
+      return true
+    } catch (error) {
+      console.error('Error copying file:', error)
+      return false
+    }
+  })
+
+  // Ensure directory exists
+  ipcMain.handle('ensure-directory', async (_event: any, dirPath: string) => {
+    try {
+      await fs.mkdir(dirPath, { recursive: true })
+      return true
+    } catch (error) {
+      console.error('Error creating directory:', error)
+      return false
     }
   })
 })

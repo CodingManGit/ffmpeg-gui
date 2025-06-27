@@ -128,20 +128,6 @@ const getFileIcon = (item: FileSystemItem): string => {
   return '📄'
 }
 
-const formatFileSize = (bytes: number | undefined): string => {
-  if (!bytes) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  let size = bytes
-  let unitIndex = 0
-  
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
-  }
-  
-  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
-}
-
 const loadDirectory = async (path: string) => {
   loading.value = true
   error.value = ''
@@ -219,11 +205,11 @@ onMounted(async () => {
 
 <style scoped>
 .file-explorer {
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   background: #f8f9fa;
-  border-right: 1px solid #e9ecef;
+  min-height: 0; /* Allow flex item to shrink */
 }
 
 .explorer-header {

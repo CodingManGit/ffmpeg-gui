@@ -61,45 +61,20 @@
       <p>No video files in queue</p>
       <p class="empty-hint">Use the file explorer to add video files</p>
     </div>
-    
-    <div class="conversion-controls" v-if="videoFiles.length > 0">
-      <button 
-        @click="startProcessing"
-        :disabled="isProcessing || videoFiles.length === 0"
-        class="start-button"
-      >
-        {{ isProcessing ? 'Processing...' : 'Start Conversion' }}
-      </button>
-      
-      <button 
-        @click="stopProcessing"
-        :disabled="!isProcessing"
-        class="stop-button"
-      >
-        Stop
-      </button>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
 import type { VideoFile } from '../types/electron'
 
-const props = defineProps<{
+defineProps<{
   videoFiles: VideoFile[]
 }>()
 
 const emit = defineEmits<{
   removeFile: [index: number]
   clearQueue: []
-  startProcessing: []
-  stopProcessing: []
 }>()
-
-const isProcessing = computed(() => {
-  return props.videoFiles.some(file => file.status === 'processing')
-})
 
 const getStatusText = (status: VideoFile['status']): string => {
   switch (status) {
@@ -117,14 +92,6 @@ const removeFile = (index: number) => {
 
 const clearQueue = () => {
   emit('clearQueue')
-}
-
-const startProcessing = () => {
-  emit('startProcessing')
-}
-
-const stopProcessing = () => {
-  emit('stopProcessing')
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -355,56 +322,5 @@ const formatFileSize = (bytes: number): string => {
 .empty-hint {
   font-size: 13px;
   font-style: italic;
-}
-
-.conversion-controls {
-  padding: 16px 20px;
-  border-top: 1px solid #e9ecef;
-  background: #f8f9fa;
-  display: flex;
-  gap: 12px;
-}
-
-.start-button {
-  flex: 1;
-  background: #28a745;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 12px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.start-button:hover:not(:disabled) {
-  background: #218838;
-}
-
-.start-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.stop-button {
-  background: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 12px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.stop-button:hover:not(:disabled) {
-  background: #c82333;
-}
-
-.stop-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

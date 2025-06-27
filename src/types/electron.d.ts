@@ -12,6 +12,10 @@ export interface VideoFile {
   status: 'pending' | 'processing' | 'completed' | 'error'
 }
 
+export interface ConversionConfig {
+  outputDirectory: string
+}
+
 export interface FileStats {
   size: number
   modified: Date
@@ -27,6 +31,9 @@ declare global {
       getParentDirectory(currentPath: string): Promise<string>
       checkIfVideoFile(filePath: string): Promise<boolean>
       getFileStats(filePath: string): Promise<FileStats | null>
+      selectDirectory(): Promise<string | null>
+      copyFile(sourcePath: string, destinationPath: string): Promise<boolean>
+      ensureDirectory(dirPath: string): Promise<boolean>
     }
     ipcRenderer: {
       on(channel: string, listener: (event: any, ...args: any[]) => void): void
