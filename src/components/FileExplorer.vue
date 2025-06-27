@@ -47,7 +47,6 @@
           'regular-file': item.isFile && !isVideoFile(item)
         }"
         @click="handleItemClick(item)"
-        @dblclick="handleItemDoubleClick(item)"
       >
         <span class="file-icon">
           {{ getFileIcon(item) }}
@@ -59,7 +58,7 @@
           class="add-button"
           title="Add to processing queue"
         >
-          +
+          Add
         </button>
       </div>
     </div>
@@ -187,16 +186,14 @@ const navigateToSegment = async (index: number) => {
 }
 
 const handleItemClick = (item: FileSystemItem) => {
-  // Single click - just select the item (visual feedback could be added here)
-}
-
-const handleItemDoubleClick = (item: FileSystemItem) => {
+  // Single click - navigate into directories
   if (item.isDirectory) {
     loadDirectory(item.path)
-  } else if (isVideoFile(item)) {
-    addToQueue(item)
   }
+  // For files, only the explicit add button will add them to queue
 }
+
+
 
 const addToQueue = async (item: FileSystemItem) => {
   if (item.isFile && isVideoFile(item)) {
@@ -353,22 +350,19 @@ onMounted(async () => {
 }
 
 .add-button {
-  background: #28a745;
+  background: #007bff;
   color: white;
   border: none;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   transition: background-color 0.2s;
+  white-space: nowrap;
 }
 
 .add-button:hover {
-  background: #218838;
+  background: #0056b3;
 }
 
 .loading, .error {
