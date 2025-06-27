@@ -1,20 +1,25 @@
 {
   "name": "ffmpeg-gui",
-  "version": "1.0.0",
-  "description": "A desktop application that provides a user-friendly graphical interface for FFmpeg.",
-  "main": "main.js",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vue-tsc && vite build && electron-builder",
+    "preview": "vite preview"
   },
-  "keywords": [
-    "ffmpeg",
-    "gui",
-    "electron"
-  ],
-  "author": "",
-  "license": "ISC",
+  "dependencies": {
+    "vue": "^3.4.21"
+  },
   "devDependencies": {
-    "electron": "^28.0.0"
-  }
+    "@vitejs/plugin-vue": "^5.0.4",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.6",
+    "vue-tsc": "^2.0.26",
+    "electron": "^30.0.1",
+    "electron-builder": "^24.13.3",
+    "vite-plugin-electron": "^0.28.6",
+    "vite-plugin-electron-renderer": "^0.14.5"
+  },
+  "main": "dist-electron/main.js"
 }

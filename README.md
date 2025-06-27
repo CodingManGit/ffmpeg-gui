@@ -48,5 +48,53 @@ The backend will be a Node.js process, potentially spawned by the Electron
     ```
 3.  Start the application:
     ```bash
-    npm start
+    npm run dev
     ```
+
+## Current Implementation Status
+
+### ✅ Completed Features
+
+1. **File Explorer Sidebar**
+   - Navigate through the file system starting from the home directory
+   - Breadcrumb navigation for easy path traversal
+   - Visual distinction between directories and video files
+   - Support for common video formats (MP4, AVI, MKV, MOV, etc.)
+   - File size display for video files
+   - Click to navigate directories, double-click to add video files to queue
+
+2. **Video Processing Queue**
+   - Display selected video files with their paths and sizes
+   - Remove individual files or clear entire queue
+   - Status indicators (pending, processing, completed, error)
+   - Start/stop processing controls
+   - Prevent duplicates from being added to the queue
+
+3. **User Interface**
+   - Clean, modern design with sidebar layout
+   - Responsive file explorer with navigation controls
+   - Visual feedback for file types and processing status
+   - Proper error handling and loading states
+
+### 🚧 Next Steps
+
+1. **FFmpeg Integration**
+   - Implement actual video conversion using FFmpeg
+   - Add conversion options (format, quality, bitrate settings)
+   - Progress tracking for individual file conversions
+   - Output directory selection
+
+2. **Enhanced Features**
+   - Drag and drop support for adding files
+   - Batch processing options
+   - Conversion presets
+   - Preview functionality
+   - Detailed conversion logs
+
+### Architecture
+
+The application uses:
+- **Frontend**: Vue 3 with TypeScript for the user interface
+- **Backend**: Electron main process for file system operations
+- **IPC Communication**: Secure communication between renderer and main processes
+- **File System**: Native Node.js APIs for directory traversal and file operations

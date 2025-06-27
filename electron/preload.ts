@@ -1,0 +1,30 @@
+import { ipcRenderer, contextBridge } from 'electron'
+
+// --------- Expose some API to the Renderer process ---------
+contextBridge.exposeInMainWorld('ipcRenderer', {
+  on(...args: Parameters<typeof ipcRenderer.on>) {
+    const [channel, listener] = args
+    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
+  },
+  off(...args: Parameters<typeof ipcRenderer.off>) {
+    const [channel, ...omit] = args
+    return ipcRenderer.off(channel, ...omit)
+  },
+  send(...args: Parameters<typeof ipcRenderer.send>) {
+    const [channel, ...omit] = args
+    return ipcRenderer.send(channel, ...omit)
+  },
+  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
+    const [channel, ...omit] = args
+    return ipcRenderer.invoke(channel, ...omit)
+  },
+})
+
+// Expose file system APIs
+contextBridge.exposeInMainWorld('fileSystemAPI', {
+  getDirectoryContents: (dirPath: string) => ipcRenderer.invoke('get-directory-contents', dirPath),
+  getHomeDirectory: () => ipcRenderer.invoke('get-home-directory'),
+  getParentDirectory: (currentPath: string) => ipcRenderer.invoke('get-parent-directory', currentPath),
+  checkIfVideoFile: (filePath: string) => ipcRenderer.invoke('check-if-video-file', filePath),
+  getFileStats: (filePath: string) => ipcRenderer.invoke('get-file-stats', filePath),
+})
