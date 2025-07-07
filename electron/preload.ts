@@ -22,8 +22,10 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
 // Expose file system APIs
 contextBridge.exposeInMainWorld('fileSystemAPI', {
-  getDirectoryContents: (dirPath: string) => ipcRenderer.invoke('get-directory-contents', dirPath),
-  getHomeDirectory: () => ipcRenderer.invoke('get-home-directory'),
+  getDirectoryContents: (dirPath: string): Promise<string[]> => 
+    ipcRenderer.invoke('get-directory-contents', dirPath),
+  getHomeDirectory: (): Promise<string> => 
+    ipcRenderer.invoke('get-home-directory'),
   getParentDirectory: (currentPath: string) => ipcRenderer.invoke('get-parent-directory', currentPath),
   checkIfVideoFile: (filePath: string) => ipcRenderer.invoke('check-if-video-file', filePath),
   getFileStats: (filePath: string) => ipcRenderer.invoke('get-file-stats', filePath),
