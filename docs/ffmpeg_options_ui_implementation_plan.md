@@ -261,8 +261,51 @@ Add:
 **File**: `src/services/commandConfig.ts`
 
 ```typescript
+import { app } from 'electron'
+import path from 'node:path'
+import fs from 'node:fs/promises'
+
 export class CommandConfigService {
-  static async loadConfig(): Promise<CommandsConfig>
+  private static config: CommandsConfig | null = null
+  
+  static async loadConfig(): Promise<CommandsConfig> {
+    if (this.config) return this.config
+    
+    let configPath: string
+    
+    if (process.env.NODE_ENV === 'development') {
+      // Development: use source file for easy modification
+      configPath = path.join(__dirname, '../config/command-options.json')
+    } else {
+      // Production: try app directory first, then resources
+      const appPath = app.getAppPath()
+      configPath = path.join(appPath, 'command-options.json')
+      
+      // Fallback to resources directory if not found in app directory
+      if (!await this.fileExists(configPath)) {
+        configPath = path.join(process.resourcesPath(), 'command-options.json')
+      }
+    }
+    
+    try {
+      const configData = await fs.readFile(configPath, 'utf-8')
+      this.config = JSON.parse(configData)
+      return this.config
+    } catch (error) {
+      console.error('Failed to load command options config:', error)
+      throw new Error(`Configuration file not found or invalid at ${configPath}`)
+    }
+  }
+  
+  private static async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath)
+      return true
+    } catch {
+      return false
+    }
+  }
+  
   static validateOption(option: CommandOption, value: any): boolean
   static generateCommandFlags(userOptions: UserCommandOptions, command: string, config: CommandsConfig): string[]
 }
@@ -346,7 +389,8 @@ src/
 │       ├── MultiSelectOption.vue
 │       └── OptionHelp.vue
 ├── config/
-│   └── command-options.json (new)
+│   └── command-options.json (new, dev)
+├── command-options.json (new, prod root)
 ├── services/ (new)
 │   ├── commandConfig.ts
 │   └── commandBuilder.ts
@@ -356,6 +400,54 @@ src/
 └── stores/ (optional)
     └── commandOptions.ts (new)
 ```
+
+## Configuration File Management Strategy
+
+### Development vs Production Paths
+
+The configuration file (`command-options.json`) will be loaded from different paths based on the environment:
+
+**Development Environment:**
+- Path: `src/config/command-options.json`
+- Easy to modify during development with hot-reload capability
+- Changes are immediately reflected without rebuilding
+
+**Production Environment:**
+- Primary Path: App directory (`app.getAppPath()/command-options.json`)
+- Fallback Path: Resources directory (`process.resourcesPath()/command-options.json`)
+- Configuration is bundled with the application during build
+
+### Build Process Integration
+
+To ensure the configuration file is available in production:
+
+1. **Update electron-builder.json5** to include the config file:
+   ```json
+   {
+     "extraResources": [
+       {
+         "from": "src/config/command-options.json",
+         "to": "command-options.json"
+       }
+     ]
+   }
+   ```
+
+2. **Add build script** to copy config to app directory:
+   ```json
+   {
+     "scripts": {
+       "postbuild": "cp src/config/command-options.json dist/command-options.json"
+     }
+   }
+   ```
+
+### Configuration File Benefits
+
+- **Version Control**: Config can be versioned with the codebase
+- **User Customization**: Advanced users can modify the external config file
+- **Fallback Safety**: Multiple paths ensure the app always finds the configuration
+- **Development Flexibility**: Easy to test different configurations during development
 
 ## Technical Considerations
 
