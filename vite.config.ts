@@ -26,4 +26,7 @@ export default defineConfig({
         : {},
     }),
   ],
+  // Ensure static assets are accessible
+  publicDir: 'public',
+  assetsInclude: ['**/*.json'],
 })

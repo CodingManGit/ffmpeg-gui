@@ -1,28 +1,23 @@
 <template>
   <div class="app">
-    <div class="app-header">
-      <h1>FFmpeg GUI</h1>
-      <p>Video conversion made easy</p>
-    </div>
-    
     <div class="app-body">
       <div class="sidebar">
-        <FileExplorer @add-video-file="addVideoFile" />
-        <ConversionSettings 
-          :video-files="videoFiles"
-          :is-processing="isProcessing"
-          @start-conversion="startConversion"
-          @stop-conversion="stopConversion"
-          @output-directory-changed="updateOutputDirectory"
-        />
+        <FileExplorer />
+        <div class="conversion-settings-inline">
+          <ConversionSettings
+            ref="conversionSettingsRef"
+            :is-processing="isProcessing"
+            @start-conversion="startConversion"
+            @stop-conversion="stopConversion"
+            @output-directory-changed="updateOutputDirectory"
+            @options-changed="updateOptions"
+            @command-changed="updateCommand"
+          />
+        </div>
       </div>
-      
+
       <div class="main-content">
-        <VideoQueue 
-          :video-files="videoFiles"
-          @remove-file="removeVideoFile"
-          @clear-queue="clearVideoQueue"
-        />
+        <ProcessQueue />
       </div>
     </div>
   </div>
@@ -31,51 +26,61 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import FileExplorer from './components/FileExplorer.vue'
-import VideoQueue from './components/VideoQueue.vue'
+import ProcessQueue from './components/ProcessQueue.vue'
 import ConversionSettings from './components/ConversionSettings.vue'
-import type { FileSystemItem, VideoFile } from './types/electron'
+import { CommandBuilder } from './services/commandBuilder'
+import { CommandConfigService } from './services/commandConfig'
+import { useFileSelectionStore } from './stores/fileSelection'
+import type { UserCommandOptions, CommandsConfig } from './types/command-options'
 
-const videoFiles = ref<VideoFile[]>([])
+const fileStore = useFileSelectionStore()
 const isProcessing = ref(false)
 const outputDirectory = ref<string>('')
+const userOptions = ref<UserCommandOptions>({})
+const config = ref<CommandsConfig | null>(null)
+const conversionSettingsRef = ref<InstanceType<typeof ConversionSettings> | null>(null)
+const commandName = ref<string>('cp')
 
-const addVideoFile = (file: FileSystemItem) => {
-  // Check if file is already in the queue
-  const exists = videoFiles.value.some(videoFile => videoFile.path === file.path)
-  if (exists) {
-    return // Don't add duplicates
+// Load configuration on mount
+const loadConfig = async () => {
+  try {
+    config.value = await CommandConfigService.loadConfig()
+  } catch (error) {
+    console.error('Failed to load command configuration:', error)
   }
-  
-  const videoFile: VideoFile = {
-    name: file.name,
-    path: file.path,
-    status: 'pending'
-  }
-  
-  videoFiles.value.push(videoFile)
 }
 
-const removeVideoFile = (index: number) => {
-  videoFiles.value.splice(index, 1)
-}
-
-const clearVideoQueue = () => {
-  // Only clear files that are not currently processing
-  videoFiles.value = videoFiles.value.filter(file => file.status === 'processing')
-}
+// Initialize configuration
+loadConfig()
 
 const updateOutputDirectory = (dir: string) => {
   outputDirectory.value = dir
 }
 
+const updateOptions = (options: UserCommandOptions) => {
+  userOptions.value = options
+  console.log('Options updated:', options)
+}
+
+const updateCommand = (command: string) => {
+  commandName.value = command
+  console.log('Command updated:', command)
+}
+
 const startConversion = async (outputDir: string) => {
   if (isProcessing.value) return
-  
+
+  // Check if there are any selected items
+  if (!fileStore.hasSelection) {
+    console.warn('No items selected for processing')
+    return
+  }
+
   isProcessing.value = true
   outputDirectory.value = outputDir
-  
-  console.log('Starting video conversion to:', outputDir)
-  
+
+  console.log('Starting processing to:', outputDir)
+
   // Ensure output directory exists
   const dirCreated = await window.fileSystemAPI.ensureDirectory(outputDir)
   if (!dirCreated) {
@@ -83,57 +88,70 @@ const startConversion = async (outputDir: string) => {
     isProcessing.value = false
     return
   }
-  
+
   // Process each pending file
-  const pendingFiles = videoFiles.value.filter(file => file.status === 'pending')
-  
-  for (const file of pendingFiles) {
+  const pendingItems = fileStore.selectedList.filter(item => item.status === 'pending' && !item.isDirectory)
+
+  for (const item of pendingItems) {
     if (!isProcessing.value) break // Stop if user clicked stop
-    
-    file.status = 'processing'
-    
+
+    fileStore.updateItemStatus(item.path, 'processing')
+
     try {
-      // Generate output filename (for now, just copy with same name)
-      // In the future, this will be where we change the extension based on conversion settings
-      const outputFileName = file.name
+      // Generate output filename
+      const outputFileName = item.name
       const outputPath = `${outputDir}/${outputFileName}`
-      
-      console.log(`Converting ${file.name}...`)
-      console.log(`Source: ${file.path}`)
+
+      console.log(`Processing ${item.name}...`)
+      console.log(`Source: ${item.path}`)
       console.log(`Destination: ${outputPath}`)
-      
-      // Stub: Copy file to output directory (will be replaced with ffmpeg conversion)
-      const success = await window.fileSystemAPI.copyFile(file.path, outputPath)
-      
-      if (success) {
-        file.status = 'completed'
-        console.log(`✅ Successfully processed ${file.name}`)
+
+      // Build command with user options
+      if (config.value) {
+        const { command, args } = CommandBuilder.buildCommand(
+          commandName.value,
+          item.path,
+          outputPath,
+          userOptions.value,
+          config.value
+        )
+
+        console.log(`Executing: ${command} ${args.join(' ')}`)
+
+        // Execute command using the command API
+        const success = await window.commandAPI.executeCommand(command, args)
+
+        if (success) {
+          fileStore.updateItemStatus(item.path, 'completed')
+          console.log(`✅ Successfully processed ${item.name}`)
+        } else {
+          fileStore.updateItemStatus(item.path, 'error')
+          console.error(`❌ Failed to process ${item.name}`)
+        }
       } else {
-        file.status = 'error'
-        console.error(`❌ Failed to process ${file.name}`)
+        throw new Error('Configuration not loaded')
       }
     } catch (error) {
-      console.error(`Error processing ${file.name}:`, error)
-      file.status = 'error'
+      console.error(`Error processing ${item.name}:`, error)
+      fileStore.updateItemStatus(item.path, 'error')
     }
-    
-    // Add a small delay to simulate processing time and allow UI updates
-    await new Promise(resolve => setTimeout(resolve, 500))
+
+    // Add a small delay to allow UI updates
+    await new Promise(resolve => setTimeout(resolve, 100))
   }
-  
+
   isProcessing.value = false
-  console.log('Conversion process completed')
+  console.log('Processing completed')
 }
 
 const stopConversion = () => {
-  console.log('Stopping video conversion...')
+  console.log('Stopping processing...')
   isProcessing.value = false
-  
-  // Reset processing files back to pending
-  videoFiles.value.forEach(file => {
-    if (file.status === 'processing') {
-      file.status = 'pending'
-    }
+
+  // Reset processing items back to pending
+  const processingItems = fileStore.selectedList.filter(item => item.status === 'processing')
+  processingItems.forEach(item => {
+    fileStore.updateItemStatus(item.path, 'pending')
   })
 }
 </script>
@@ -144,26 +162,6 @@ const stopConversion = () => {
   display: flex;
   flex-direction: column;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-.app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20px;
-  text-align: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.app-header h1 {
-  margin: 0 0 8px 0;
-  font-size: 28px;
-  font-weight: 600;
-}
-
-.app-header p {
-  margin: 0;
-  font-size: 14px;
-  opacity: 0.9;
 }
 
 .app-body {
@@ -179,9 +177,13 @@ const stopConversion = () => {
   background: #f8f9fa;
   border-right: 1px solid #dee2e6;
   resize: horizontal;
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.conversion-settings-inline {
+  flex-shrink: 0;
 }
 
 .main-content {

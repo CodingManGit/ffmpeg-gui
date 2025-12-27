@@ -2,17 +2,20 @@
   <div class="file-explorer">
     <div class="explorer-header">
       <h3>File Explorer</h3>
+      <div class="selection-info" v-if="fileStore.hasSelection">
+        {{ fileStore.selectedCount }} selected
+      </div>
       <div class="navigation">
-        <button 
-          @click="navigateUp" 
+        <button
+          @click="navigateUp"
           :disabled="!canNavigateUp"
           class="nav-button"
           title="Go to parent directory"
         >
           ↑
         </button>
-        <button 
-          @click="goHome" 
+        <button
+          @click="goHome"
           class="nav-button"
           title="Go to home directory"
         >
@@ -20,11 +23,11 @@
         </button>
       </div>
     </div>
-    
+
     <div class="current-path">
       <div class="breadcrumb">
-        <span 
-          v-for="(segment, index) in pathSegments" 
+        <span
+          v-for="(segment, index) in pathSegments"
           :key="index"
           class="breadcrumb-item"
           :class="{ active: index === pathSegments.length - 1 }"
@@ -35,38 +38,38 @@
         </span>
       </div>
     </div>
-    
+
     <div class="file-list" v-if="!loading">
-      <div 
-        v-for="item in sortedItems" 
+      <div
+        v-for="item in sortedItems"
         :key="item.path"
         class="file-item"
-        :class="{ 
-          'directory': item.isDirectory, 
+        :class="{
+          'directory': item.isDirectory,
+          'drive': isDrive(item),
           'video-file': item.isFile && isVideoFile(item),
-          'regular-file': item.isFile && !isVideoFile(item)
+          'regular-file': item.isFile && !isVideoFile(item),
+          'selected': fileStore.isSelected(item.path)
         }"
         @click="handleItemClick(item)"
       >
+        <input
+          type="checkbox"
+          :checked="fileStore.isSelected(item.path)"
+          @click.stop="toggleSelection(item)"
+          class="checkbox"
+        />
         <span class="file-icon">
           {{ getFileIcon(item) }}
         </span>
         <span class="file-name">{{ item.name }}</span>
-        <button 
-          v-if="item.isFile && isVideoFile(item)"
-          @click.stop="addToQueue(item)"
-          class="add-button"
-          title="Add to processing queue"
-        >
-          Add
-        </button>
       </div>
     </div>
-    
+
     <div v-else class="loading">
       Loading...
     </div>
-    
+
     <div v-if="error" class="error">
       {{ error }}
     </div>
@@ -76,10 +79,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import type { FileSystemItem } from '../types/electron'
+import { useFileSelectionStore } from '../stores/fileSelection'
 
-const emit = defineEmits<{
-  addVideoFile: [file: FileSystemItem]
-}>()
+const fileStore = useFileSelectionStore()
 
 const currentPath = ref('')
 const items = ref<FileSystemItem[]>([])
@@ -88,21 +90,67 @@ const error = ref('')
 const videoExtensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv', '.ts', '.mts']
 
 const canNavigateUp = computed(() => {
-  return currentPath.value !== '/' && currentPath.value.length > 1
+  // Check if we can go up (not at root)
+  if (!currentPath.value) return true
+
+  // Virtual root - can't go up from here
+  if (currentPath.value === '/') return false
+
+  // Windows drive root: C:/ or similar
+  const windowsRootRegex = /^[A-Z]:\/$/
+  if (windowsRootRegex.test(currentPath.value)) return true
+
+  // Drive letter root: /C/
+  if (/^\/[A-Z]\/$/.test(currentPath.value)) return true
+
+  // Unix root
+  if (currentPath.value === '/') return false
+
+  return true
 })
 
 const pathSegments = computed(() => {
   if (!currentPath.value) return []
-  
+
+  // Virtual root
+  if (currentPath.value === '/') {
+    return [{ name: '/', path: '/' }]
+  }
+
+  // Handle Windows paths like "C:/Users/..."
+  const windowsPathRegex = /^([A-Z]):\/(.*)$/
+  const match = currentPath.value.match(windowsPathRegex)
+
+  if (match) {
+    // Windows path: show as /C:/Users/... format
+    const drive = match[1]
+    const rest = match[2] || ''
+    const segments = rest.split('/').filter(Boolean)
+
+    const result = [
+      { name: '/', path: '/' },
+      { name: `/${drive}/`, path: currentPath.value }
+    ]
+
+    let accPath = `/${drive}`
+    for (const segment of segments) {
+      accPath += '/' + segment
+      result.push({ name: segment, path: accPath })
+    }
+
+    return result
+  }
+
+  // Unix-style path
   const segments = currentPath.value.split('/').filter(Boolean)
   const result = [{ name: '/', path: '/' }]
-  
+
   let accPath = ''
   for (const segment of segments) {
     accPath += '/' + segment
     result.push({ name: segment, path: accPath })
   }
-  
+
   return result
 })
 
@@ -122,7 +170,15 @@ const isVideoFile = (item: FileSystemItem): boolean => {
   return videoExtensions.includes(ext)
 }
 
+const isDrive = (item: FileSystemItem): boolean => {
+  return /^[A-Z]:\/$/.test(item.path) || /^\/[A-Z]:\/$/.test(item.path)
+}
+
 const getFileIcon = (item: FileSystemItem): string => {
+  // Check if it's a drive (pattern: C:/, D:/, etc.)
+  if (/^[A-Z]:\/$/.test(item.path) || /^\/[A-Z]:\/$/.test(item.path)) {
+    return '💾'
+  }
   if (item.isDirectory) return '📁'
   if (isVideoFile(item)) return '🎬'
   return '📄'
@@ -131,11 +187,18 @@ const getFileIcon = (item: FileSystemItem): string => {
 const loadDirectory = async (path: string) => {
   loading.value = true
   error.value = ''
-  
+
   try {
-    const contents = await window.fileSystemAPI.getDirectoryContents(path)
-    items.value = contents
-    currentPath.value = path
+    // Handle virtual root "/" - list drives
+    if (path === '/') {
+      const drives = await window.fileSystemAPI.listDrives()
+      items.value = drives
+      currentPath.value = path
+    } else {
+      const contents = await window.fileSystemAPI.getDirectoryContents(path)
+      items.value = contents
+      currentPath.value = path
+    }
   } catch (err) {
     error.value = `Failed to load directory: ${err}`
     console.error('Error loading directory:', err)
@@ -146,10 +209,19 @@ const loadDirectory = async (path: string) => {
 
 const navigateUp = async () => {
   if (!canNavigateUp.value) return
-  
+
   try {
-    const parentPath = await window.fileSystemAPI.getParentDirectory(currentPath.value)
-    await loadDirectory(parentPath)
+    // Check if we're at a drive root and need to go to virtual root
+    const windowsRootRegex = /^[A-Z]:\/$/
+    const driveRootRegex = /^\/[A-Z]\/$/
+
+    if (windowsRootRegex.test(currentPath.value) || driveRootRegex.test(currentPath.value)) {
+      // Go to virtual root to show all drives
+      await loadDirectory('/')
+    } else {
+      const parentPath = await window.fileSystemAPI.getParentDirectory(currentPath.value)
+      await loadDirectory(parentPath)
+    }
   } catch (err) {
     error.value = `Failed to navigate up: ${err}`
   }
@@ -176,26 +248,10 @@ const handleItemClick = (item: FileSystemItem) => {
   if (item.isDirectory) {
     loadDirectory(item.path)
   }
-  // For files, only the explicit add button will add them to queue
 }
 
-
-
-const addToQueue = async (item: FileSystemItem) => {
-  if (item.isFile && isVideoFile(item)) {
-    // Get file stats for additional information
-    try {
-      const stats = await window.fileSystemAPI.getFileStats(item.path)
-      const fileWithStats = {
-        ...item,
-        size: stats?.size
-      }
-      emit('addVideoFile', fileWithStats)
-    } catch (err) {
-      console.warn('Could not get file stats:', err)
-      emit('addVideoFile', item)
-    }
-  }
+const toggleSelection = (item: FileSystemItem) => {
+  fileStore.toggleSelection(item)
 }
 
 onMounted(async () => {
@@ -226,6 +282,12 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 600;
   color: #495057;
+}
+
+.selection-info {
+  font-size: 12px;
+  color: #007bff;
+  font-weight: 500;
 }
 
 .navigation {
@@ -310,8 +372,17 @@ onMounted(async () => {
   background: #f8f9fa;
 }
 
+.file-item.selected {
+  background: #e7f3ff;
+}
+
 .file-item.directory {
   font-weight: 500;
+}
+
+.file-item.drive {
+  font-weight: 600;
+  color: #0066cc;
 }
 
 .file-item.video-file {
@@ -320,6 +391,13 @@ onMounted(async () => {
 
 .file-item.regular-file {
   color: #6c757d;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .file-icon {
@@ -333,22 +411,6 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.add-button {
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  white-space: nowrap;
-}
-
-.add-button:hover {
-  background: #0056b3;
 }
 
 .loading, .error {

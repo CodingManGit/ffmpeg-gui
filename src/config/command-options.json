@@ -1,0 +1,143 @@
+{
+  "commands": {
+    "cp": {
+      "name": "Copy Command",
+      "description": "File copy operation with various options",
+      "categories": {
+        "basic": {
+          "name": "Basic Options",
+          "description": "Common copy options",
+          "options": {
+            "recursive": {
+              "name": "Recursive Copy",
+              "description": "Copy directories recursively",
+              "type": "boolean",
+              "flag": "-r",
+              "default": false,
+              "specification": "Copy directories and their contents recursively. Required when copying directories."
+            },
+            "preserve": {
+              "name": "Preserve Attributes",
+              "description": "Preserve file attributes",
+              "type": "select",
+              "flag": "-p",
+              "default": "none",
+              "options": ["none", "timestamps", "permissions", "all"],
+              "specification": "Preserve specified file attributes during copy operation."
+            },
+            "verbose": {
+              "name": "Verbose Output",
+              "description": "Show detailed output",
+              "type": "boolean",
+              "flag": "-v",
+              "default": false,
+              "specification": "Display detailed information about the copy operation."
+            }
+          }
+        },
+        "advanced": {
+          "name": "Advanced Options",
+          "description": "Advanced copy settings",
+          "options": {
+            "force": {
+              "name": "Force Overwrite",
+              "description": "Force overwrite existing files",
+              "type": "boolean",
+              "flag": "-f",
+              "default": false,
+              "specification": "Force overwrite of existing destination files without prompting."
+            },
+            "interactive": {
+              "name": "Interactive Mode",
+              "description": "Prompt before overwrite",
+              "type": "boolean",
+              "flag": "-i",
+              "default": false,
+              "specification": "Prompt before overwriting existing files."
+            }
+          }
+        }
+      }
+    },
+    "ffmpeg": {
+      "name": "FFmpeg Video Converter",
+      "description": "Video/audio conversion with comprehensive options",
+      "categories": {
+        "video": {
+          "name": "Video Options",
+          "description": "Options for video processing",
+          "options": {
+            "codec": {
+              "name": "Video Codec",
+              "description": "Specify the video codec to use",
+              "type": "select",
+              "flag": "-c:v",
+              "default": "libx264",
+              "options": ["libx264", "libx265", "libvpx", "libvpx-vp9"],
+              "required": false,
+              "specification": "The video codec determines how video data is compressed. libx264 is widely compatible, libx265 offers better compression, libvpx is for WebM format."
+            },
+            "bitrate": {
+              "name": "Video Bitrate",
+              "description": "Set the video bitrate",
+              "type": "text",
+              "flag": "-b:v",
+              "default": "1000k",
+              "placeholder": "e.g., 1000k, 2M",
+              "validation": "^\\d+[kKmMgG]?$",
+              "specification": "Video bitrate controls the quality and file size. Higher bitrates mean better quality but larger files. Use 'k' for kilobits, 'M' for megabits."
+            },
+            "resolution": {
+              "name": "Output Resolution",
+              "description": "Set output video resolution",
+              "type": "select",
+              "flag": "-s",
+              "default": "original",
+              "options": ["original", "1920x1080", "1280x720", "854x480", "640x360"],
+              "specification": "Output video resolution. 'original' maintains input resolution. Lower resolutions reduce file size."
+            }
+          }
+        },
+        "audio": {
+          "name": "Audio Options",
+          "description": "Options for audio processing",
+          "options": {
+            "audio_codec": {
+              "name": "Audio Codec",
+              "description": "Specify the audio codec",
+              "type": "select",
+              "flag": "-c:a",
+              "default": "aac",
+              "options": ["aac", "mp3", "ogg", "flac", "copy"],
+              "specification": "Audio codec determines how audio is compressed. AAC is widely compatible, MP3 is universal, FLAC is lossless, 'copy' preserves original audio."
+            },
+            "audio_bitrate": {
+              "name": "Audio Bitrate",
+              "description": "Set the audio bitrate",
+              "type": "select",
+              "flag": "-b:a",
+              "default": "128k",
+              "options": ["64k", "128k", "192k", "256k", "320k"],
+              "specification": "Audio bitrate affects audio quality. 128k is standard quality, 192k+ is high quality, 64k is low quality/small size."
+            }
+          }
+        },
+        "format": {
+          "name": "Format Options",
+          "description": "Output format and container options",
+          "options": {
+            "output_format": {
+              "name": "Output Format",
+              "description": "Output container format",
+              "type": "select",
+              "flag": "-f",
+              "default": "mp4",
+              "options": ["mp4", "avi", "mkv", "webm", "mov"],
+              "specification": "The output format determines the container. MP4 is widely compatible, MKV supports many codecs, WebM is web-optimized, AVI is legacy format."
+            }
+          }
+        }
+      }
+    }
+  }
+}

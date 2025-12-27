@@ -13,6 +13,7 @@
     "dev:electron": "npm run build:quick && npm run electron"
   },
   "dependencies": {
+    "pinia": "^3.0.4",
     "vue": "^3.4.21"
   },
   "devDependencies": {

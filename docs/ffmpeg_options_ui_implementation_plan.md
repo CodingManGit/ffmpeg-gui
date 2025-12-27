@@ -337,6 +337,86 @@ Updates needed:
 - Add generic command execution with options
 - Progress tracking and cancellation support
 - Error handling and logging
+- **Terminal Output Logging**: Capture and log stdout/stderr to console for debugging and monitoring
+
+##### Terminal Output Logging Implementation
+
+The command execution handler will capture both stdout and stderr streams and log them to the console for debugging purposes. This is essential for:
+
+1. **Debugging**: Seeing what the command actually outputs
+2. **Error Diagnosis**: Understanding why commands fail
+3. **Progress Monitoring**: Tracking command execution progress
+4. **User Feedback**: Providing detailed error messages to users
+
+**Implementation Details:**
+
+```typescript
+import { spawn } from 'node:child_process'
+
+// In the execute-command handler:
+ipcMain.handle('execute-command', async (_event: any, command: string, args: string[]) => {
+  try {
+    console.log(`Executing command: ${command} ${args.join(' ')}`)
+    
+    const childProcess = spawn(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'] // stdin, stdout, stderr
+    })
+    
+    // Capture stdout and log to console
+    childProcess.stdout.on('data', (data: Buffer) => {
+      const output = data.toString().trim()
+      if (output) {
+        console.log(`[${command} stdout]: ${output}`)
+      }
+    })
+    
+    // Capture stderr and log to console
+    childProcess.stderr.on('data', (data: Buffer) => {
+      const errorOutput = data.toString().trim()
+      if (errorOutput) {
+        console.error(`[${command} stderr]: ${errorOutput}`)
+      }
+    })
+    
+    // Wait for process completion
+    return new Promise((resolve, reject) => {
+      childProcess.on('close', (code: number) => {
+        console.log(`Command ${command} exited with code ${code}`)
+        if (code === 0) {
+          resolve(true)
+        } else {
+          reject(new Error(`Command failed with exit code ${code}`))
+        }
+      })
+      
+      childProcess.on('error', (error: Error) => {
+        console.error(`Command ${command} failed to start:`, error)
+        reject(error)
+      })
+    })
+    
+  } catch (error) {
+    console.error('Error executing command:', error)
+    throw error
+  }
+})
+```
+
+**Log Format Benefits:**
+- **Structured Logging**: Clear separation between stdout and stderr
+- **Command Context**: Each log includes the command name for easy filtering
+- **Timestamp**: Console logs include timestamps automatically
+- **Error Visibility**: stderr is logged with `console.error()` for proper error highlighting
+
+**Console Output Example:**
+```
+[2025-12-27T10:30:00.000Z] Executing command: ffmpeg -i input.mp4 -c:v libx264 output.mp4
+[2025-12-27T10:30:00.100Z] [ffmpeg stdout]: Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'input.mp4':
+[2025-12-27T10:30:00.101Z] [ffmpeg stdout]:   Duration: 00:01:23.45, start: 0.000000, bitrate: 1500 kb/s
+[2025-12-27T10:30:00.102Z] [ffmpeg stdout]:   Stream #0:0(und): Video: h264 (Main) (avc1 / 0x31637661), yuv420p, 1920x1080
+[2025-12-27T10:30:00.200Z] [ffmpeg stderr]: [libx264 @ 0x7f8a1c00b800] using cpu capabilities: MMX2 SSE2Fast SSSE3 SSE4.2 AVX FMA3 BMI2 AVX2
+[2025-12-27T10:30:45.000Z] Command ffmpeg exited with code 0
+```
 
 #### 4.2 Preload Script Updates
 **File**: `electron/preload.ts`
@@ -345,12 +425,20 @@ Add new APIs:
 
 ```typescript
 contextBridge.exposeInMainWorld('commandAPI', {
-  executeCommand: (command: string, inputPath: string, outputPath: string, options: string[]) => 
-    ipcRenderer.invoke('execute-command', command, inputPath, outputPath, options),
+  executeCommand: (command: string, args: string[]) => 
+    ipcRenderer.invoke('execute-command', command, args),
   getCommandVersion: (command: string) => ipcRenderer.invoke('get-command-version', command),
   cancelExecution: (taskId: string) => ipcRenderer.invoke('cancel-execution', taskId)
 })
 ```
+
+**Note on Command Construction**: The command arguments will be constructed by the `CommandBuilder` service in the renderer process, which will handle:
+- Building the full command with input/output paths
+- Adding user-selected options as flags
+- Proper escaping of file paths and arguments
+- Validation of option combinations
+
+The main process only receives the complete command and argument array, ensuring separation of concerns and security.
 
 ### Phase 5: User Experience Enhancements
 
@@ -477,6 +565,55 @@ To ensure the configuration file is available in production:
 - File permission issues
 - Disk space validation
 
+### Logging and Monitoring
+
+#### Console Logging Strategy
+
+The application implements a comprehensive console logging strategy for debugging and monitoring:
+
+1. **Command Execution Logging**:
+   - Log command execution start with full command and arguments
+   - Capture and log stdout in real-time with `console.log()`
+   - Capture and log stderr in real-time with `console.error()`
+   - Log command completion with exit code
+
+2. **Log Format Standards**:
+   ```typescript
+   // Informational messages
+   console.log(`[${command} stdout]: ${output}`)
+   
+   // Error messages  
+   console.error(`[${command} stderr]: ${errorOutput}`)
+   
+   // Command lifecycle events
+   console.log(`Executing command: ${command} ${args.join(' ')}`)
+   console.log(`Command ${command} exited with code ${code}`)
+   ```
+
+3. **Benefits of Structured Logging**:
+   - **Debugging**: Developers can see exactly what commands are executed and their output
+   - **Error Diagnosis**: Clear separation between stdout (normal output) and stderr (errors/warnings)
+   - **Performance Monitoring**: Track command execution times and resource usage
+   - **User Support**: Provide detailed error information for troubleshooting
+
+4. **Security Considerations**:
+   - **No Sensitive Data**: Ensure logs don't contain passwords or sensitive information
+   - **Path Sanitization**: Log file paths but avoid exposing full user directory structures
+   - **Command Validation**: Log only validated and sanitized commands
+
+5. **Development vs Production**:
+   - **Development**: Full verbose logging enabled
+   - **Production**: Consider log level configuration (INFO, WARN, ERROR only)
+   - **Log Rotation**: For production, implement log rotation to prevent disk space issues
+
+#### Integration with Existing Logging Patterns
+
+The new command execution logging follows the existing application logging patterns:
+- Use `console.log()` for informational messages and progress updates
+- Use `console.error()` for error conditions and stderr output
+- Use `console.warn()` for warnings and non-critical issues
+- Maintain consistent formatting across all log messages
+
 ## Success Criteria
 
 1. Users can discover and configure command options through intuitive UI
@@ -487,6 +624,9 @@ To ensure the configuration file is available in production:
 6. All input validation works correctly
 7. Command preview accurately reflects final command
 8. Framework is extensible to support multiple commands (cp, ffmpeg, etc.)
+9. **Command execution logs stdout and stderr to console for debugging**
+10. **Logging follows consistent patterns and security best practices**
+11. **Error messages from command execution are properly captured and displayed**
 
 ## Future Enhancements
 

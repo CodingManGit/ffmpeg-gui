@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm run build:quick:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

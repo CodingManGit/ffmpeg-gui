@@ -5,6 +5,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 
 const execAsync = promisify(exec)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -76,39 +77,79 @@ app.whenReady().then(() => {
     try {
       const items = await fs.readdir(dirPath, { withFileTypes: true })
       const result = []
-      
+
       for (const item of items) {
         // Skip hidden files and system files
         if (item.name.startsWith('.') && item.name !== '..') {
           continue
         }
-        
+
+        const fullPath = path.join(dirPath, item.name)
+        // Normalize the full path to use forward slashes
+        const normalizedFullPath = fullPath.replace(/\\/g, '/')
+
         result.push({
           name: item.name,
-          path: path.join(dirPath, item.name),
+          path: normalizedFullPath,
           isDirectory: item.isDirectory(),
           isFile: item.isFile()
         })
       }
-      
+
       return result
     } catch (error) {
       console.error('Error reading directory:', error)
       throw new Error(`Failed to read directory: ${(error as Error).message}`)
     }
   })
-  
+
   ipcMain.handle('get-home-directory', () => {
-    return os.homedir()
+    // Return normalized home directory path
+    return os.homedir().replace(/\\/g, '/')
   })
-  
+
+  ipcMain.handle('list-drives', async () => {
+    if (process.platform !== 'win32') {
+      // On Unix systems, return root
+      return [{
+        name: 'Root',
+        path: '/',
+        isDirectory: true,
+        isFile: false
+      }]
+    }
+
+    // On Windows, list available drives
+    const drives: string[] = []
+    // Windows drives are typically A-Z
+    for (let i = 65; i <= 90; i++) {
+      const driveLetter = String.fromCharCode(i)
+      const drivePath = `${driveLetter}:\\`
+      try {
+        // Check if drive exists by trying to access it
+        await fs.access(drivePath)
+        drives.push(driveLetter)
+      } catch {
+        // Drive doesn't exist, skip it
+      }
+    }
+
+    return drives.map(drive => ({
+      name: `${drive}:`,
+      path: `${drive}:/`,
+      isDirectory: true,
+      isFile: false
+    }))
+  })
+
   ipcMain.handle('get-parent-directory', (_event: any, currentPath: string) => {
     const parentPath = path.dirname(currentPath)
-    // Prevent going above root
-    if (parentPath === currentPath) {
+    // Normalize and prevent going above root
+    const normalizedParent = parentPath.replace(/\\/g, '/')
+    if (normalizedParent === currentPath) {
       return currentPath
     }
-    return parentPath
+    return normalizedParent
   })
   
   ipcMain.handle('check-if-video-file', (_event: any, filePath: string) => {
@@ -161,6 +202,83 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Error copying file:', error)
       return false
+    }
+  })
+
+  // Generic command execution handler with logging
+  ipcMain.handle('execute-command', async (_event: any, command: string, args: string[]) => {
+    try {
+      console.log(`Executing command: ${command} ${args.join(' ')}`)
+
+      // Handle platform-specific commands
+      let actualCommand = command
+      let actualArgs = [...args]
+
+      if (process.platform === 'win32') {
+        // Convert forward slashes back to Windows backslashes for actual execution
+        actualArgs = args.map(arg => arg.replace(/\//g, '\\'))
+
+        // On Windows, convert Unix commands to Windows equivalents
+        if (command === 'cp') {
+          actualCommand = 'copy'
+          // copy uses: copy source destination
+          actualArgs = [
+            actualArgs[0], // source
+            actualArgs[actualArgs.length - 1] // destination (last arg)
+          ]
+        }
+      }
+
+      // Quote arguments that contain spaces
+      const quotedArgs = actualArgs.map(arg => {
+        // If the argument contains spaces, quote it
+        if (arg.includes(' ')) {
+          return `"${arg}"`
+        }
+        return arg
+      })
+
+      const childProcess = spawn(actualCommand, quotedArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: process.platform === 'win32' // Use shell on Windows for better compatibility
+      })
+
+      // Capture stdout and log to console
+      childProcess.stdout.on('data', (data: Buffer) => {
+        const output = data.toString().trim()
+        if (output) {
+          console.log(`[${command} stdout]: ${output}`)
+        }
+      })
+
+      // Capture stderr and log to console
+      childProcess.stderr.on('data', (data: Buffer) => {
+        const errorOutput = data.toString().trim()
+        if (errorOutput) {
+          console.error(`[${command} stderr]: ${errorOutput}`)
+        }
+      })
+
+      // Wait for process completion
+      return new Promise((resolve, reject) => {
+        childProcess.on('close', (code: number) => {
+          console.log(`Command ${command} exited with code ${code}`)
+          if (code === 0) {
+            resolve(true)
+          } else {
+            reject(new Error(`Command failed with exit code ${code}`))
+          }
+        })
+
+        childProcess.on('error', (error: Error) => {
+          console.error(`Command ${command} failed to start:`, error)
+          reject(error)
+        })
+      })
+
+    } catch (error) {
+      console.error('Error executing command:', error)
+      throw error
     }
   })
 

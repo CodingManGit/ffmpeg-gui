@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge } from 'electron'
+import type { FileSystemItem } from '../src/types/electron'
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
@@ -22,9 +23,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 
 // Expose file system APIs
 contextBridge.exposeInMainWorld('fileSystemAPI', {
-  getDirectoryContents: (dirPath: string): Promise<string[]> => 
+  getDirectoryContents: (dirPath: string): Promise<string[]> =>
     ipcRenderer.invoke('get-directory-contents', dirPath),
-  getHomeDirectory: (): Promise<string> => 
+  getHomeDirectory: (): Promise<string> =>
     ipcRenderer.invoke('get-home-directory'),
   getParentDirectory: (currentPath: string) => ipcRenderer.invoke('get-parent-directory', currentPath),
   checkIfVideoFile: (filePath: string) => ipcRenderer.invoke('check-if-video-file', filePath),
@@ -32,4 +33,11 @@ contextBridge.exposeInMainWorld('fileSystemAPI', {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   copyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke('copy-file', sourcePath, destinationPath),
   ensureDirectory: (dirPath: string) => ipcRenderer.invoke('ensure-directory', dirPath),
+  listDrives: (): Promise<FileSystemItem[]> => ipcRenderer.invoke('list-drives'),
+})
+
+// Expose command execution APIs
+contextBridge.exposeInMainWorld('commandAPI', {
+  executeCommand: (command: string, args: string[]) =>
+    ipcRenderer.invoke('execute-command', command, args),
 })

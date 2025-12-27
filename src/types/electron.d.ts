@@ -34,6 +34,10 @@ declare global {
       selectDirectory(): Promise<string | null>
       copyFile(sourcePath: string, destinationPath: string): Promise<boolean>
       ensureDirectory(dirPath: string): Promise<boolean>
+      listDrives(): Promise<FileSystemItem[]>
+    }
+    commandAPI: {
+      executeCommand(command: string, args: string[]): Promise<boolean>
     }
     ipcRenderer: {
       on(channel: string, listener: (event: any, ...args: any[]) => void): void
