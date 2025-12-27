@@ -32,7 +32,7 @@ npm run build
 ```
 
 ### Run Built Application
-```bash
+```bashA
 npm run electron
 ```
 
