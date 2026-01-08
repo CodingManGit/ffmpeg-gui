@@ -42,6 +42,9 @@ declare global {
       getPathToBinary?: (binaryName: string) => Promise<string | null>
       executeCommand?: (command: string, args: string[]) => Promise<boolean>
     }
+    platformAPI?: {
+      platform: () => Promise<string>
+    }
     ipcRenderer: {
       on(channel: string, listener: (event: any, ...args: any[]) => void): void
       off(channel: string, ...args: any[]): void

@@ -70,6 +70,8 @@ function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   })
 
@@ -78,11 +80,21 @@ function createWindow() {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
+  // Open DevTools in development to debug
+  if (VITE_DEV_SERVER_URL) {
+    win.webContents.openDevTools()
+  } else {
+    // Also open in production to debug loading issues
+    win.webContents.openDevTools()
+  }
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    // win.loadFile('dist/index.html')
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+    // In production, load index.html from dist directory
+    // Normalize path to use forward slashes for asar compatibility
+    const indexPath = path.normalize(path.join(__dirname, '../dist/index.html')).replace(/\\/g, '/')
+    win.loadFile(indexPath)
   }
 }
 
@@ -106,7 +118,7 @@ app.on('activate', () => {
 
 app.whenReady().then(() => {
   createWindow();
-  
+
   // IPC handlers for file system operations
   ipcMain.handle('get-directory-contents', async (_event: any, dirPath: string) => {
     try {
@@ -243,7 +255,10 @@ app.whenReady().then(() => {
   // Generic command execution handler with logging
   ipcMain.handle('execute-command', async (_event: any, command: string, args: string[]) => {
     try {
-      console.log(`Executing command: ${command} ${args.join(' ')}`)
+      console.log('[MAIN] ==================== Command Execution ====================')
+      console.log('[MAIN] Original command:', command)
+      console.log('[MAIN] Original args:', args)
+      console.log('[MAIN] Platform:', process.platform)
 
       // Handle platform-specific commands
       let actualCommand = command
@@ -258,6 +273,7 @@ app.whenReady().then(() => {
             actualArgs[0], // source (already has forward slashes from renderer)
             actualArgs[actualArgs.length - 1] // destination (already has forward slashes from renderer)
           ]
+          console.log('[MAIN] Converted "cp" to "copy"')
         }
 
         // When using shell: true, we need to escape paths with spaces
@@ -271,6 +287,7 @@ app.whenReady().then(() => {
           }
           return windowsPath
         })
+        console.log('[MAIN] Converted paths to Windows format')
       } else {
         // On Unix, quote arguments that contain spaces
         actualArgs = actualArgs.map(arg => {
@@ -281,16 +298,22 @@ app.whenReady().then(() => {
         })
       }
 
+      console.log('[MAIN] Actual command:', actualCommand)
+      console.log('[MAIN] Actual args:', actualArgs)
+      console.log('[MAIN] Full command:', actualCommand, actualArgs.join(' '))
+
       const childProcess = spawn(actualCommand, actualArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: process.platform === 'win32' // Use shell on Windows for better compatibility
       })
 
+      console.log('[MAIN] Spawned process with PID:', childProcess.pid)
+
       // Capture stdout and log to console
       childProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString().trim()
         if (output) {
-          console.log(`[${command} stdout]: ${output}`)
+          console.log(`[${actualCommand} stdout]: ${output}`)
         }
       })
 
@@ -298,29 +321,41 @@ app.whenReady().then(() => {
       childProcess.stderr.on('data', (data: Buffer) => {
         const errorOutput = data.toString().trim()
         if (errorOutput) {
-          console.error(`[${command} stderr]: ${errorOutput}`)
+          console.error(`[${actualCommand} stderr]: ${errorOutput}`)
         }
       })
 
       // Wait for process completion
       return new Promise((resolve, reject) => {
         childProcess.on('close', (code: number) => {
-          console.log(`Command ${command} exited with code ${code}`)
+          console.log('[MAIN] Process exited with code:', code)
+          console.log('[MAIN] ==================== Command Execution Complete ====================')
           if (code === 0) {
+            console.log('[MAIN] ✅ Command succeeded')
             resolve(true)
           } else {
+            console.error('[MAIN] ❌ Command failed with exit code:', code)
             reject(new Error(`Command failed with exit code ${code}`))
           }
         })
 
         childProcess.on('error', (error: Error) => {
-          console.error(`Command ${command} failed to start:`, error)
+          console.error('[MAIN] ❌ Command failed to start:', error)
+          console.error('[MAIN] Error details:', {
+            message: error.message,
+            stack: error.stack,
+            code: (error as any).code
+          })
           reject(error)
         })
       })
 
     } catch (error) {
-      console.error('Error executing command:', error)
+      console.error('[MAIN] ❌ Exception during command execution:', error)
+      console.error('[MAIN] Exception details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
       throw error
     }
   })
@@ -411,5 +446,10 @@ app.whenReady().then(() => {
       // Return null if binary doesn't exist, allowing fallback to system PATH
       return null
     }
+  })
+
+  // Get platform information
+  ipcMain.handle('get-platform', async () => {
+    return process.platform
   })
 })

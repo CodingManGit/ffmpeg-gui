@@ -26,24 +26,8 @@ export default defineConfig({
         : {},
     }),
   ],
+  // Use absolute paths for production builds
+  base: process.env.NODE_ENV === 'production' ? './' : '/',
   // Ensure static assets are accessible
   publicDir: 'public',
-  assetsInclude: ['**/*.json'],
-  build: {
-    rollupOptions: {
-      output: {
-        assetFileNames: (assetInfo) => {
-          // Don't copy bin/ folder to dist (to avoid duplication)
-          if (assetInfo.name && assetInfo.name.includes('bin/')) {
-            return null
-          }
-          // Don't copy command-options.json to dist (will be in resources)
-          if (assetInfo.name === 'command-options.json') {
-            return null
-          }
-          return 'assets/[name]-[hash][extname]'
-        }
-      }
-    }
-  }
 })

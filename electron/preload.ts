@@ -46,3 +46,8 @@ contextBridge.exposeInMainWorld('commandAPI', {
   getPathToBinary: (binaryName: string) =>
     ipcRenderer.invoke('get-path-to-binary', binaryName),
 })
+
+// Expose platform information
+contextBridge.exposeInMain('platformAPI', {
+  platform: () => ipcRenderer.invoke('get-platform'),
+})
