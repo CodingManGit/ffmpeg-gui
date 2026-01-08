@@ -1,12 +1,12 @@
 <template>
   <div class="conversion-settings">
     <div class="settings-header">
-      <h3>Conversion Settings</h3>
+      <h3>{{ $t('conversionSettings.title') }}</h3>
     </div>
 
     <div class="settings-content">
       <div class="setting-item">
-        <label for="command-select">Command:</label>
+        <label for="command-select">{{ $t('conversionSettings.command') }}:</label>
         <select
           id="command-select"
           v-model="localCommandName"
@@ -23,29 +23,29 @@
       </div>
 
       <div class="setting-item">
-        <label for="output-directory">Output Directory:</label>
+        <label for="output-directory">{{ $t('conversionSettings.outputDirectory') }}:</label>
         <div class="directory-selector">
           <input
             id="output-directory"
             type="text"
             :value="outputDirectory"
             readonly
-            placeholder="Select output directory..."
+            :placeholder="$t('conversionSettings.selectOutput') + '...'"
             class="directory-input"
           />
           <button @click="selectOutputDirectory" class="browse-button">
-            Browse
+            {{ $t('common.browse') }}
           </button>
         </div>
         <div v-if="outputDirectory" class="directory-info">
-          Files will be saved to: {{ outputDirectory }}
+          {{ $t('conversionSettings.filesWillBeSavedTo', { path: outputDirectory }) }}
         </div>
       </div>
 
       <div class="setting-item">
-        <label>Command Options:</label>
+        <label>{{ $t('conversionSettings.commandOptions') }}:</label>
         <button @click="openOptionsModal" class="options-button">
-          Configure Options
+          {{ $t('conversionSettings.configureOptions') }}
         </button>
         <div v-if="hasCustomOptions" class="options-summary">
           {{ optionsSummary }}
@@ -55,7 +55,7 @@
       <div class="setting-item">
         <div class="concurrency-row">
           <div class="concurrency-input">
-            <label for="concurrency-select">Concurrency:</label>
+            <label for="concurrency-select">{{ $t('conversionSettings.concurrency') }}:</label>
             <select
               id="concurrency-select"
               v-model.number="concurrency"
@@ -63,7 +63,7 @@
               :disabled="isProcessing"
             >
               <option v-for="n in 10" :key="n" :value="n">
-                {{ n }} job{{ n > 1 ? 's' : '' }}
+                {{ n }} {{ n > 1 ? $t('conversionSettings.jobs') : $t('conversionSettings.job') }}
               </option>
             </select>
           </div>
@@ -76,12 +76,12 @@
                 :disabled="isProcessing"
                 class="checkbox-input"
               />
-              Overwrite
+              {{ $t('conversionSettings.overwrite') }}
             </label>
           </div>
         </div>
         <div class="concurrency-info">
-          Process up to {{ concurrency }} file{{ concurrency > 1 ? 's' : '' }} simultaneously
+          {{ $t('conversionSettings.processUpTo', { count: concurrency, plural: concurrency > 1 ? 's' : '' }) }}
         </div>
       </div>
 
@@ -91,14 +91,14 @@
           :disabled="!canStartConversion"
           class="convert-button"
         >
-          Start Conversion
+          {{ $t('conversionSettings.startConversion') }}
         </button>
         <button
           @click="stopConversion"
           :disabled="!isProcessing"
           class="stop-button"
         >
-          Stop
+          {{ $t('conversionSettings.stop') }}
         </button>
       </div>
     </div>
@@ -119,10 +119,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from '../composables/useI18n'
 import { CommandConfigService } from '../services/commandConfig'
 import { useFileSelectionStore } from '../stores/fileSelection'
 import type { CommandsConfig, UserCommandOptions } from '../types/command-options'
 import CommandOptionsModal from './CommandOptionsModal.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   isProcessing: boolean
@@ -184,7 +187,7 @@ const hasCustomOptions = computed(() => {
 
 const optionsSummary = computed(() => {
   const count = Object.keys(localOptions.value).length
-  return `${count} option${count !== 1 ? 's' : ''} configured`
+  return t('conversionSettings.optionsConfigured', { count, plural: count !== 1 ? 's' : '' })
 })
 
 // Load configuration on mount

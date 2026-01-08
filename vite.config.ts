@@ -1,9 +1,9 @@
 import vue from '@vitejs/plugin-vue'
-import path from 'node:path'
 import fs from 'node:fs'
+import path from 'node:path'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron/simple'
-import type { Plugin } from 'vite'
 
 // Plugin to exclude files/folders from public directory being copied to dist
 function excludeFromPublic(exclude: string[]): Plugin {
@@ -63,4 +63,8 @@ export default defineConfig({
   // These should only be in resources/ via extraResources, not in asar
   publicDir: 'public',
   assetsInclude: ['**/*.svg', '**/*.png'],
+  server: {
+    host: '127.0.0.1',
+    port: 5173,
+  },
 })

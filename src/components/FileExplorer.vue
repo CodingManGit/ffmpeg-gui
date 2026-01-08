@@ -1,23 +1,23 @@
 <template>
   <div class="file-explorer">
     <div class="explorer-header">
-      <h3>File Explorer</h3>
+      <h3>{{ $t('fileExplorer.title') }}</h3>
       <div class="selection-info" v-if="fileStore.hasSelection">
-        {{ fileStore.selectedCount }} selected
+        {{ $t('fileExplorer.selected', { count: fileStore.selectedCount }) }}
       </div>
       <div class="navigation">
         <button
           @click="navigateUp"
           :disabled="!canNavigateUp"
           class="nav-button"
-          title="Go to parent directory"
+          :title="$t('fileExplorer.parentDirectory')"
         >
           ↑
         </button>
         <button
           @click="goHome"
           class="nav-button"
-          title="Go to home directory"
+          :title="$t('fileExplorer.homeDirectory')"
         >
           🏠
         </button>
@@ -67,7 +67,7 @@
     </div>
 
     <div v-else class="loading">
-      Loading...
+      {{ $t('common.loading') }}
     </div>
 
     <div v-if="error" class="error">

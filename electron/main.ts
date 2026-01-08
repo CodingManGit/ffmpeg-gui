@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
 import { exec, spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -64,6 +64,166 @@ function getCommandOptionsPath(): string {
 }
 
 let win: any
+let currentLocale = 'en'
+let menuTranslations: any = {}
+
+// Load menu translations
+async function loadMenuTranslations() {
+  try {
+    // Load both English and Chinese translations
+
+
+    // For production, we'll need to bundle these or use a different approach
+    // For now, we'll define them inline
+    menuTranslations = {
+      en: {
+        menu: {
+          file: 'File',
+          edit: 'Edit',
+          view: 'View',
+          language: 'Language',
+          quit: 'Quit',
+          undo: 'Undo',
+          redo: 'Redo',
+          cut: 'Cut',
+          copy: 'Copy',
+          paste: 'Paste',
+          reload: 'Reload',
+          forceReload: 'Force Reload',
+          toggleDevTools: 'Toggle Developer Tools',
+          resetZoom: 'Reset Zoom',
+          zoomIn: 'Zoom In',
+          zoomOut: 'Zoom Out',
+          toggleFullscreen: 'Toggle Fullscreen'
+        },
+        language: {
+          english: 'English',
+          chinese: '中文'
+        }
+      },
+      zh: {
+        menu: {
+          file: '文件',
+          edit: '编辑',
+          view: '查看',
+          language: '语言',
+          quit: '退出',
+          undo: '撤销',
+          redo: '重做',
+          cut: '剪切',
+          copy: '复制',
+          paste: '粘贴',
+          reload: '重新加载',
+          forceReload: '强制重新加载',
+          toggleDevTools: '切换开发者工具',
+          resetZoom: '重置缩放',
+          zoomIn: '放大',
+          zoomOut: '缩小',
+          toggleFullscreen: '切换全屏'
+        },
+        language: {
+          english: 'English',
+          chinese: '中文'
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load menu translations:', error)
+  }
+}
+
+// Get translation for current locale
+function t(key: string): string {
+  const keys = key.split('.')
+  let value: any = menuTranslations[currentLocale]
+
+  for (const k of keys) {
+    if (value && typeof value === 'object') {
+      value = value[k]
+    } else {
+      return key
+    }
+  }
+
+  return typeof value === 'string' ? value : key
+}
+
+function createMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      id: 'file-menu',
+      label: t('menu.file'),
+      submenu: [
+        { role: 'quit', label: t('menu.quit') }
+      ]
+    },
+    {
+      id: 'edit-menu',
+      label: t('menu.edit'),
+      submenu: [
+        { id: 'edit-undo', role: 'undo', label: t('menu.undo') },
+        { id: 'edit-redo', role: 'redo', label: t('menu.redo') },
+        { type: 'separator' },
+        { id: 'edit-cut', role: 'cut', label: t('menu.cut') },
+        { id: 'edit-copy', role: 'copy', label: t('menu.copy') },
+        { id: 'edit-paste', role: 'paste', label: t('menu.paste') }
+      ]
+    },
+    {
+      id: 'view-menu',
+      label: t('menu.view'),
+      submenu: [
+        { id: 'view-reload', role: 'reload', label: t('menu.reload') },
+        { id: 'view-force-reload', role: 'forceReload', label: t('menu.forceReload') },
+        { id: 'view-toggle-devtools', role: 'toggleDevTools', label: t('menu.toggleDevTools') },
+        { type: 'separator' },
+        { id: 'view-reset-zoom', role: 'resetZoom', label: t('menu.resetZoom') },
+        { id: 'view-zoom-in', role: 'zoomIn', label: t('menu.zoomIn') },
+        { id: 'view-zoom-out', role: 'zoomOut', label: t('menu.zoomOut') },
+        { type: 'separator' },
+        { id: 'view-toggle-fullscreen', role: 'togglefullscreen', label: t('menu.toggleFullscreen') },
+        { type: 'separator' },
+        {
+          label: t('menu.language'),
+          id: 'language',
+          submenu: [
+            {
+              id: 'lang-en',
+              label: t('language.english'),
+              type: 'radio',
+              checked: currentLocale === 'en',
+              click: () => {
+                currentLocale = 'en'
+                win?.webContents.send('language-changed', 'en')
+                updateMenuLabels()
+              }
+            },
+            {
+              id: 'lang-zh',
+              label: t('language.chinese'),
+              type: 'radio',
+              checked: currentLocale === 'zh',
+              click: () => {
+                currentLocale = 'zh'
+                win?.webContents.send('language-changed', 'zh')
+                updateMenuLabels()
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+  return menu
+}
+
+// Update menu labels when locale changes
+function updateMenuLabels() {
+  createMenu()
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -90,7 +250,15 @@ function createWindow() {
   // }
 
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
+    const loadDevServer = async () => {
+      try {
+        await win.loadURL(VITE_DEV_SERVER_URL)
+      } catch (e) {
+        console.error('Failed to load dev server URL, retrying in 1s...', e)
+        setTimeout(loadDevServer, 1000)
+      }
+    }
+    loadDevServer()
   } else {
     // In production, load index.html from dist directory
     // Normalize path to use forward slashes for asar compatibility
@@ -117,8 +285,22 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(() => {
-  createWindow();
+app.whenReady().then(async () => {
+  // Load menu translations
+  await loadMenuTranslations()
+
+  // Get initial locale from localStorage (will be synced from renderer)
+  createMenu()
+  createWindow()
+
+  // IPC handlers for language state
+  ipcMain.on('update-menu-locale', (_event, locale: string) => {
+    // Update current locale
+    currentLocale = locale
+
+    // Update the checked state and labels of menu items
+    updateMenuLabels()
+  })
 
   // IPC handlers for file system operations
   ipcMain.handle('get-directory-contents', async (_event: any, dirPath: string) => {
@@ -199,17 +381,17 @@ app.whenReady().then(() => {
     }
     return normalizedParent
   })
-  
+
   ipcMain.handle('check-if-video-file', (_event: any, filePath: string) => {
     const videoExtensions = [
-      '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', 
+      '.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm',
       '.m4v', '.3gp', '.ogv', '.ts', '.mts', '.m2ts', '.vob',
       '.mpg', '.mpeg', '.divx', '.xvid', '.rm', '.rmvb', '.asf'
     ]
     const ext = path.extname(filePath).toLowerCase()
     return videoExtensions.includes(ext)
   })
-  
+
   ipcMain.handle('get-file-stats', async (_event: any, filePath: string) => {
     try {
       const stats = await fs.stat(filePath)
@@ -405,7 +587,9 @@ app.whenReady().then(() => {
 
       // In dev mode, try fetch from Vite dev server
       if (VITE_DEV_SERVER_URL) {
-        const response = await fetch('command-options.json')
+        // VITE_DEV_SERVER_URL usually ends with a slash, but we ensure one just in case
+        const baseUrl = VITE_DEV_SERVER_URL.endsWith('/') ? VITE_DEV_SERVER_URL : `${VITE_DEV_SERVER_URL}/`
+        const response = await fetch(`${baseUrl}command-options.json`)
         if (response.ok) {
           const text = await response.text()
           return JSON.parse(text)

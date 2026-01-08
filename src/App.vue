@@ -26,7 +26,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ConversionSettings from './components/ConversionSettings.vue'
 import FileExplorer from './components/FileExplorer.vue'
 import ProcessQueue from './components/ProcessQueue.vue'
@@ -36,6 +37,7 @@ import { useFileSelectionStore, type SelectedItem } from './stores/fileSelection
 import type { CommandsConfig, UserCommandOptions } from './types/command-options'
 
 const fileStore = useFileSelectionStore()
+const { locale } = useI18n()
 const isProcessing = ref(false)
 const outputDirectory = ref<string>('')
 const userOptions = ref<UserCommandOptions>({})
@@ -44,6 +46,21 @@ const commandName = ref<string>('')
 const concurrency = ref<number>(1)
 const overwrite = ref<boolean>(false)
 const activeJobs = ref<number>(0)
+
+// Listen for language changes from menu
+onMounted(() => {
+  window.ipcRenderer.on('language-changed', (_event: any, newLocale: string) => {
+    locale.value = newLocale
+    localStorage.setItem('locale', newLocale)
+    document.documentElement.lang = newLocale
+
+    // Notify main process to update menu check state
+    window.ipcRenderer.send('update-menu-locale', newLocale)
+  })
+
+  // Notify main process of current locale on startup
+  window.ipcRenderer.send('update-menu-locale', locale.value)
+})
 
 // Load configuration on mount
 const loadConfig = async () => {

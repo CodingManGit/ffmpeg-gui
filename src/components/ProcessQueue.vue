@@ -1,33 +1,33 @@
 <template>
   <div class="process-queue">
     <div class="queue-header">
-      <h3>Processing Queue</h3>
+      <h3>{{ $t('processQueue.title') }}</h3>
       <div class="queue-actions">
         <button
           @click="clearCompleted"
           :disabled="!hasCompletedItems"
           class="clear-button"
-          title="Clear completed and failed items"
+          :title="$t('processQueue.clearCompletedAndFailed')"
         >
-          Clear Completed
+          {{ $t('processQueue.clearCompleted') }}
         </button>
         <button
           @click="clearAll"
           :disabled="!fileStore.hasSelection"
           class="clear-button"
-          title="Clear all items"
+          :title="$t('processQueue.clearAllItems')"
         >
-          Clear All
+          {{ $t('processQueue.clearAll') }}
         </button>
       </div>
     </div>
 
     <div class="queue-stats">
-      <span class="file-count">{{ fileStore.selectedCount }} item{{ fileStore.selectedCount !== 1 ? 's' : '' }}</span>
-      <span class="file-count" v-if="pendingCount > 0">{{ pendingCount }} pending</span>
-      <span class="file-count" v-if="processingCount > 0">{{ processingCount }} processing</span>
-      <span class="file-count" v-if="completedCount > 0">{{ completedCount }} completed</span>
-      <span class="file-count" v-if="errorCount > 0">{{ errorCount }} failed</span>
+      <span class="file-count">{{ $t('processQueue.items', { count: fileStore.selectedCount, plural: fileStore.selectedCount !== 1 ? 's' : '' }) }}</span>
+      <span class="file-count" v-if="pendingCount > 0">{{ $t('processQueue.pendingItems', { count: pendingCount }) }}</span>
+      <span class="file-count" v-if="processingCount > 0">{{ $t('processQueue.processingItems', { count: processingCount }) }}</span>
+      <span class="file-count" v-if="completedCount > 0">{{ $t('processQueue.completedItems', { count: completedCount }) }}</span>
+      <span class="file-count" v-if="errorCount > 0">{{ $t('processQueue.failedItems', { count: errorCount }) }}</span>
     </div>
 
     <div class="file-list" v-if="fileStore.hasSelection">
@@ -48,7 +48,7 @@
           <div class="file-details">
             <div class="file-name" :title="item.name">
               {{ item.name }}
-              <span v-if="item.isDuplicate" class="duplicate-badge" title="Duplicate filename">⚠️</span>
+              <span v-if="item.isDuplicate" class="duplicate-badge" :title="$t('processQueue.duplicateFilename')">⚠️</span>
             </div>
             <div class="file-path" :title="item.path">{{ item.path }}</div>
           </div>
@@ -65,7 +65,7 @@
             @click="removeItem(item.path)"
             :disabled="item.status === 'processing'"
             class="remove-button"
-            title="Remove from queue"
+            :title="$t('processQueue.removeFromQueue')"
           >
             ×
           </button>
@@ -75,16 +75,18 @@
 
     <div v-else class="empty-queue">
       <div class="empty-icon">📂</div>
-      <p>No items selected</p>
-      <p class="empty-hint">Use the file explorer to select files and folders</p>
+      <p>{{ $t('processQueue.noItemsSelected') }}</p>
+      <p class="empty-hint">{{ $t('processQueue.useFileExplorer') }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from '../composables/useI18n'
 import { useFileSelectionStore, type SelectedItem } from '../stores/fileSelection'
 
+const { t } = useI18n()
 const fileStore = useFileSelectionStore()
 
 const pendingCount = computed(() => {
@@ -109,11 +111,11 @@ const hasCompletedItems = computed(() => {
 
 const getStatusText = (status: SelectedItem['status']): string => {
   switch (status) {
-    case 'pending': return 'Pending'
-    case 'processing': return 'Processing'
-    case 'completed': return 'Completed'
-    case 'error': return 'Error'
-    case 'existing': return 'Existing'
+    case 'pending': return t('processQueue.pending')
+    case 'processing': return t('processQueue.processing')
+    case 'completed': return t('processQueue.completed')
+    case 'error': return t('processQueue.error')
+    case 'existing': return t('processQueue.existing')
     default: return 'Unknown'
   }
 }
