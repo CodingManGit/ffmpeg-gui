@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build && electron-builder",
-    "build:quick": "vue-tsc && vite build",
-    "build:dev": "vue-tsc && vite build",
+    "build": "vue-tsc && vite build",
+    "build:electron": "vue-tsc && vite build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
     "preview": "vite preview",
     "electron": "electron dist-electron/main.js",
-    "electron:dev": "electron .",
-    "dev:electron": "npm run build:quick && npm run electron"
+    "clean": "rimraf dist dist-electron release",
+    "clean:force": "taskkill /F /IM electron.exe 2>nul && rimraf dist dist-electron release"
   },
   "dependencies": {
     "pinia": "^3.0.4",
@@ -21,6 +21,7 @@
     "@vitejs/plugin-vue": "^5.0.4",
     "electron": "^30.0.1",
     "electron-builder": "^24.13.3",
+    "rimraf": "^6.1.2",
     "typescript": "^5.2.2",
     "vite": "^5.1.6",
     "vite-plugin-electron": "^0.28.6",

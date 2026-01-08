@@ -1,15 +1,26 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.yourcompany.ffmpeg-gui",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "FFmpeg GUI",
   "directories": {
     "output": "release/${version}"
   },
   "files": [
     "dist",
     "dist-electron"
+  ],
+  "extraResources": [
+    {
+      "from": "public/bin/",
+      "to": "bin/",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "public/command-options.json",
+      "to": "command-options.json"
+    }
   ],
   "mac": {
     "target": [

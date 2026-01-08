@@ -37,8 +37,10 @@ declare global {
       listDrives(): Promise<FileSystemItem[]>
       getDirectoryFiles(dirPath: string): Promise<string[]>
     }
-    commandAPI: {
-      executeCommand(command: string, args: string[]): Promise<boolean>
+    commandAPI?: {
+      getCommandConfig?: () => Promise<any>
+      getPathToBinary?: (binaryName: string) => Promise<string | null>
+      executeCommand?: (command: string, args: string[]) => Promise<boolean>
     }
     ipcRenderer: {
       on(channel: string, listener: (event: any, ...args: any[]) => void): void

@@ -115,10 +115,10 @@ const processItem = async (item: SelectedItem, outputDir: string): Promise<void>
 
     // If overwrite is enabled, delete the output file first if it exists
     if (overwrite.value) {
-      const deleteSuccess = await window.commandAPI.executeCommand(
+      const deleteSuccess = await (window.commandAPI?.executeCommand?.(
         process.platform === 'win32' ? 'del' : 'rm',
         [outputPath]
-      )
+      ) ?? false)
       if (deleteSuccess) {
         console.log(`Deleted existing file: ${outputPath}`)
       } else {
@@ -139,7 +139,7 @@ const processItem = async (item: SelectedItem, outputDir: string): Promise<void>
       console.log(`Executing: ${command} ${args.join(' ')}`)
 
       // Execute command using the command API
-      const success = await window.commandAPI.executeCommand(command, args)
+      const success = await (window.commandAPI?.executeCommand?.(command, args) ?? false)
 
       if (success) {
         fileStore.updateItemStatus(item.path, 'completed')

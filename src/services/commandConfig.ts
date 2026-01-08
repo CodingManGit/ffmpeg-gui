@@ -1,5 +1,17 @@
 import type { CommandOption, CommandsConfig, UserCommandOptions } from '../types/command-options'
 
+declare global {
+  interface Window {
+    commandAPI?: {
+      getCommandConfig?: () => Promise<CommandsConfig>
+      getPathToBinary?: (binaryName: string) => Promise<string | null>
+      executeCommand?: (command: string, args: string[]) => Promise<boolean>
+    }
+  }
+}
+
+
+
 export class CommandConfigService {
   private static config: CommandsConfig | null = null
 
@@ -7,16 +19,30 @@ export class CommandConfigService {
     if (this.config) return this.config
 
     try {
-      // Check if we're in Electron and use appropriate method
-      const isElectron = typeof window !== 'undefined' && 
-                        (window as any).ipcRenderer !== undefined
-      
+      // Check if we're in Electron and use IPC
+      const isElectron = typeof window !== 'undefined' && window.commandAPI !== undefined
+
       if (isElectron) {
-        // In Electron, we might need to load the file differently
-        // Try multiple approaches
-        return await this.loadConfigForElectron()
+        // In Electron, prefer IPC to load config from main process, but fall back to file-based loader
+        console.log('Running in Electron environment')
+        try {
+          if (window.commandAPI?.getCommandConfig) {
+            console.log('Loading config via IPC in Electron environment')
+            this.config = await window.commandAPI.getCommandConfig()
+            return this.config!
+          } else {
+            console.log('No IPC getCommandConfig handler available, trying file-based Electron loader')
+            this.config = await this.loadConfigForElectron()
+            return this.config!
+          }
+        } catch (error) {
+          console.warn('IPC config fetch failed, falling back to file loader', error)
+          this.config = await this.loadConfigForElectron()
+          return this.config!
+        }
       } else {
         // Regular web environment - use fetch
+        console.log('Loading config via fetch in web environment')
         return await this.loadConfigForWeb()
       }
       

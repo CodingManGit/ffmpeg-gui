@@ -1,11 +1,10 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { exec, spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
-import { exec } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { spawn } from 'node:child_process'
 
 const execAsync = promisify(exec)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -27,6 +26,42 @@ export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
+
+// Add bundled binaries directory to PATH
+// Development: public/bin/
+// Production: resources/bin/
+function addBundledBinariesToPATH() {
+  let binDir: string
+
+  if (VITE_DEV_SERVER_URL) {
+    // Development mode
+    binDir = path.join(process.env.APP_ROOT, 'public', 'bin')
+  } else {
+    // Production mode
+    binDir = path.join(process.resourcesPath, 'bin')
+  }
+
+  // Add to PATH
+  const currentPath = process.env.PATH || ''
+  if (!currentPath.includes(binDir)) {
+    process.env.PATH = `${binDir}${path.delimiter}${currentPath}`
+    console.log(`Added bundled binaries to PATH: ${binDir}`)
+  }
+}
+
+// Call this early to add binaries to PATH
+addBundledBinariesToPATH()
+
+// Get command-options.json path
+function getCommandOptionsPath(): string {
+  if (VITE_DEV_SERVER_URL) {
+    // Development mode: serve from public folder via Vite
+    return 'command-options.json'
+  }
+
+  // Production mode: file is in resources directory (outside asar)
+  return path.join(process.resourcesPath, 'command-options.json')
+}
 
 let win: any
 
@@ -323,6 +358,58 @@ app.whenReady().then(() => {
       console.error('Error reading directory files:', error)
       // If directory doesn't exist, return empty array
       return []
+    }
+  })
+
+  // Get command-options.json content
+  ipcMain.handle('get-command-config', async () => {
+    try {
+      const configPath = getCommandOptionsPath()
+      console.log('Loading command config from:', configPath)
+
+      // In dev mode, try fetch from Vite dev server
+      if (VITE_DEV_SERVER_URL) {
+        const response = await fetch('command-options.json')
+        if (response.ok) {
+          const text = await response.text()
+          return JSON.parse(text)
+        }
+      }
+
+      // In production, read from filesystem
+      const content = await fs.readFile(configPath, 'utf-8')
+      return JSON.parse(content)
+    } catch (error) {
+      console.error('Error loading command config:', error)
+      return { commands: {} }
+    }
+  })
+
+  // Get path to a bundled binary
+  ipcMain.handle('get-path-to-binary', async (_event: any, binaryName: string) => {
+    try {
+      let binDir: string
+
+      if (VITE_DEV_SERVER_URL) {
+        // Development mode
+        binDir = path.join(process.env.APP_ROOT, 'public', 'bin')
+      } else {
+        // Production mode
+        binDir = path.join(process.resourcesPath, 'bin')
+      }
+
+      const binaryPath = process.platform === 'win32'
+        ? path.join(binDir, `${binaryName}.exe`)
+        : path.join(binDir, binaryName)
+
+      // Check if binary exists
+      await fs.access(binaryPath)
+      console.log(`Found binary at: ${binaryPath}`)
+      return binaryPath
+    } catch (error) {
+      console.error(`Binary ${binaryName} not found:`, error)
+      // Return null if binary doesn't exist, allowing fallback to system PATH
+      return null
     }
   })
 })

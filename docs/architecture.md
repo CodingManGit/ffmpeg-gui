@@ -1,7 +1,7 @@
 # FFmpeg GUI - Technical Architecture Documentation
 
 **Status**: 🔧 Technical
-**Last Updated**: 2025-12-27
+**Last Updated**: 2025-01-08
 **Version**: 0.0.0 (Pre-Alpha)
 
 ---
@@ -32,7 +32,9 @@ This document provides a comprehensive technical overview of the FFmpeg GUI appl
 
 ### System Summary
 
-FFmpeg GUI is a cross-platform desktop application built with Electron and Vue.js 3 that provides an intuitive interface for video file conversion. The application follows Electron's multi-process architecture, separating concerns between the main process (Node.js) and renderer process (Vue.js application).
+FFmpeg GUI is a cross-platform desktop application built with Electron and Vue.js 3 that provides an intuitive interface for command execution, originally designed for video file conversion with FFmpeg but now supporting generic command-line operations. The application follows Electron's multi-process architecture, separating concerns between the main process (Node.js) and renderer process (Vue.js application).
+
+**Key Evolution**: The application has evolved from a FFmpeg-specific video converter to a generic command execution GUI with dynamic configuration support. Commands and their options are loaded from a JSON configuration file, allowing flexible support for various command-line tools.
 
 ### Key Technologies
 
@@ -40,7 +42,9 @@ FFmpeg GUI is a cross-platform desktop application built with Electron and Vue.j
 - **Vue.js 3**: Progressive frontend framework with Composition API
 - **TypeScript**: Type-safe JavaScript throughout
 - **Vite**: Fast build tool and development server
+- **Pinia**: State management for file selection and processing
 - **IPC (Inter-Process Communication)**: Secure main-renderer communication
+- **Dynamic Command Configuration**: JSON-based command definition system
 
 ---
 
@@ -88,41 +92,31 @@ The application is built incrementally:
 
 ### Multi-Process Model
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    FFmpeg GUI Application                   │
-├──────────────────────────┬──────────────────────────────────┤
-│     Main Process         │      Renderer Process            │
-│     (Node.js Context)    │      (Chromium Context)          │
-├──────────────────────────┼──────────────────────────────────┤
-│                          │                                  │
-│  ┌────────────────────┐  │  ┌──────────────────────────┐  │
-│  │  BrowserWindow     │  │  │   Vue.js 3 App           │  │
-│  │  Management        │  │  │                          │  │
-│  └────────────────────┘  │  │  ┌────────────────────┐  │  │
-│                          │  │  │  App.vue           │  │  │
-│  ┌────────────────────┐  │  │  │  (Main Container)  │  │  │
-│  │  IPC Handlers      │◄─┼──┼──┤                    │  │  │
-│  │  - File System     │  │  │  └────────────────────┘  │  │
-│  │  - FFmpeg Spawn    │  │  │           │               │  │
-│  │  - Dialogs         │  │  │           ▼               │  │
-│  └────────────────────┘  │  │  ┌────────────────────┐  │  │
-│                          │  │  │  Components        │  │  │
-│  ┌────────────────────┐  │  │  │  - FileExplorer    │  │  │
-│  │  File System API   │  │  │  │  - VideoQueue      │  │  │
-│  │  (fs.promises)     │  │  │  │  - Conversion...   │  │  │
-│  └────────────────────┘  │  │  └────────────────────┘  │  │
-│                          │  │                          │  │
-│  ┌────────────────────┐  │  │  ┌────────────────────┐  │  │
-│  │  FFmpeg Processes  │  │  │  │  State Management  │  │  │
-│  │  (child_process)   │  │  │  │  (ref/reactive)    │  │  │
-│  └────────────────────┘  │  │  └────────────────────┘  │  │
-│                          │  │                          │  │
-└──────────────────────────┴──────────────────────────────┘
-           │                                    │
-           │        IPC Communication          │
-           └────────────────────────────────────┘
-              (via preload.ts + contextBridge)
+```mermaid
+graph TB
+    subgraph App["FFmpeg GUI Application"]
+        direction TB
+
+        subgraph Main["Main Process (Node.js Context)"]
+            BW["BrowserWindow Management"]
+            IPC["IPC Handlers<br/>- File System<br/>- Command Execution<br/>- Dialogs"]
+            FS["File System API (fs.promises)"]
+            CP["Command Processes (child_process)"]
+        end
+
+        subgraph Renderer["Renderer Process (Chromium Context)"]
+            Vue["Vue.js 3 App"]
+            AppComp["App.vue (Main Container)"]
+            Comp["Components<br/>- FileExplorer<br/>- ProcessQueue<br/>- ConversionSettings<br/>- CommandOptionsModal"]
+            Store["State Management<br/>(Pinia Store)"]
+        end
+
+        IPC <-->|"IPC Communication<br/>via preload.ts + contextBridge"| AppComp
+    end
+
+    AppComp --> Vue
+    Vue --> Comp
+    Comp --> Store
 ```
 
 ### Process Responsibilities
@@ -193,178 +187,156 @@ window.ipcRenderer    // Raw IPC access (limited)
 
 ### 1. Application Initialization Flow
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                   Application Startup                      │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Start([electron/main.ts]) --> Ready[app.whenReady]
+    Ready --> CreateWindow[createWindow]
 
-electron/main.ts
-      │
-      ├─► app.whenReady()
-      │     │
-      │     └─► createWindow()
-      │           │
-      │           ├─► new BrowserWindow()
-      │           │     │
-      │           │     ├─► Load preload script
-      │           │     │     └─► electron/preload.ts
-      │           │     │           └─► contextBridge.exposeInMainWorld()
-      │           │     │
-      │           │     └─► Load renderer content
-      │           │           ├─► Dev: Vite dev server
-      │           │           └─► Prod: dist/index.html
-      │           │
-      │           └─► Register IPC handlers
-      │                 ├─► get-directory-contents
-      │                 ├─► check-if-video-file
-      │                 ├─► ... (9 handlers total)
-      │
-      └─► Renderer loads
-            │
-            └─► src/main.ts
-                  └─► createApp(App.vue).mount()
-                        └─► Initialize Vue components
+    CreateWindow --> NewWindow[new BrowserWindow]
+    NewWindow --> LoadPreload[Load preload script]
+    LoadPreload --> PreloadFile["electron/preload.ts"]
+    PreloadFile --> ContextBridge[contextBridge.exposeInMainWorld]
+
+    NewWindow --> LoadContent[Load renderer content]
+    LoadContent --> Dev{Dev?}
+    Dev -->|Yes| ViteServer[Vite dev server]
+    Dev -->|No| Prod[dist/index.html]
+
+    CreateWindow --> RegisterIPC[Register IPC handlers]
+    RegisterIPC --> Handler1["get-directory-contents"]
+    RegisterIPC --> Handler2["check-if-video-file"]
+    RegisterIPC --> Handler3["execute-command"]
+    RegisterIPC --> Handler4["... 8 more handlers"]
+
+    ViteServer & Prod --> RendererLoad[Renderer loads]
+    RendererLoad --> MainTS["src/main.ts"]
+    MainTS --> CreateApp[createApp App.vue.mount]
+    CreateApp --> InitComponents[Initialize Vue components]
 ```
 
 ### 2. File Explorer Navigation Flow
 
-```
-User Interaction (FileExplorer.vue)
-      │
-      ├─► User clicks directory
-      │     │
-      │     └─► onDirectoryClick(path)
-      │           │
-      │           └─► window.fileSystemAPI.getDirectoryContents(path)
-      │                 │
-      │                 ▼
-      │           IPC Invoke (Main Process)
-      │                 │
-      │                 └─► ipcMain.handle('get-directory-contents')
-      │                       │
-      │                       ├─► fs.readdir(dirPath, { withFileTypes: true })
-      │                       ├─► Filter hidden/system files
-      │                       ├─► Map to FileSystemItem[]
-      │                       └─► Return Promise<FileSystemItem[]>
-      │                 │
-      │                 ▼
-      ├─► Update component state
-      │     │
-      │     └─► currentPath.value = path
-      │           directoryItems.value = items
-      │
-      └─► Reactive UI update
-            └─► Template re-renders with new items
+```mermaid
+sequenceDiagram
+    participant User
+    participant FE as FileExplorer.vue
+    participant API as window.fileSystemAPI
+    participant Main as Main Process
+    participant FS as fs Module
+
+    User->>FE: Click directory
+    FE->>FE: onDirectoryClick(path)
+    FE->>API: getDirectoryContents(path)
+    API->>Main: IPC invoke
+    Main->>FS: fs.readdir withFileTypes
+    FS-->>Main: Directory entries
+    Main->>Main: Filter hidden/system files
+    Main->>Main: Map to FileSystemItem[]
+    Main-->>API: Promise<FileSystemItem[]>
+    API-->>FE: items
+    FE->>FE: currentPath.value = path
+    FE->>FE: directoryItems.value = items
+    FE->>User: Reactive UI update
 ```
 
-### 3. Video Queue Addition Flow
+### 3. File Selection Flow (Pinia Store)
 
-```
-User Interaction (FileExplorer.vue)
-      │
-      ├─► User double-clicks video file
-      │     │
-      │     └─► onFileDoubleClick(item)
-      │           │
-      │           └─► emit('add-video-file', item)
-      │
-      ▼
-Parent Component (App.vue)
-      │
-      ├─► addVideoFile(file: FileSystemItem)
-      │     │
-      │     ├─► Check for duplicates
-      │     │     └─► videoFiles.value.some(f => f.path === file.path)
-      │     │
-      │     ├─► Create VideoFile object
-      │     │     └─► { name, path, status: 'pending' }
-      │     │
-      │     └─► videoFiles.value.push(videoFile)
-      │
-      ▼
-Component Update (VideoQueue.vue)
-      │
-      └─► Receives updated :video-files prop
-            └─► Reactive list re-renders
+```mermaid
+sequenceDiagram
+    participant User
+    participant FE as FileExplorer.vue
+    participant Store as fileSelection Pinia Store
+    participant PQ as ProcessQueue.vue
+
+    User->>FE: Click checkbox on file
+    FE->>FE: onCheckboxChange(item)
+    FE->>Store: toggleSelection(item)
+
+    alt Already selected
+        Store->>Store: Remove from selectedPaths
+        Store->>Store: Remove from selectedItems
+    else Not selected
+        Store->>Store: Add to selectedPaths
+        Store->>Store: Add to selectedItems<br/>status: 'pending'
+    end
+
+    Store->>Store: updateDuplicates()
+    Store->>Store: Check for duplicate names
+
+    Store-->>FE: Selection updated
+    Store-->>PQ: Reactive update
+    PQ->>User: Display updated queue
 ```
 
-### 4. Conversion Process Flow (Current Stub)
+### 4. Command Execution Flow (Current Implementation)
 
-```
-User Action (ConversionSettings.vue)
-      │
-      ├─► User clicks "Start Conversion"
-      │     │
-      │     └─► emit('start-conversion', outputDir)
-      │
-      ▼
-Parent Component (App.vue)
-      │
-      ├─► startConversion(outputDir: string)
-      │     │
-      │     ├─► isProcessing.value = true
-      │     │
-      │     ├─► Ensure output directory exists
-      │     │     └─► window.fileSystemAPI.ensureDirectory(outputDir)
-      │     │           └─► IPC → fs.mkdir(dirPath, { recursive: true })
-      │     │
-      │     ├─► Filter pending files
-      │     │     └─► videoFiles.value.filter(f => f.status === 'pending')
-      │     │
-      │     └─► Process each file (for loop)
-      │           │
-      │           ├─► file.status = 'processing'
-      │           │
-      │           ├─► Generate output path
-      │           │     └─► outputPath = `${outputDir}/${file.name}`
-      │           │
-      │           ├─► Execute stub operation
-      │           │     └─► window.fileSystemAPI.copyFile(src, dest)
-      │           │           └─► IPC → execAsync(`cp "${src}" "${dest}"`)
-      │           │
-      │           ├─► Update status based on result
-      │           │     ├─► Success: file.status = 'completed'
-      │           │     └─► Error: file.status = 'error'
-      │           │
-      │           └─► await new Promise(resolve => setTimeout(resolve, 500))
-      │
-      ├─► isProcessing.value = false
-      │
-      └─► Console: "Conversion process completed"
+```mermaid
+flowchart TD
+    Start([User clicks Start Processing]) --> Emit[emit start-conversion]
+    Emit --> Check{fileStore.hasSelection?}
+
+    Check -->|No| Warn[Console warn: No items selected]
+    Check -->|Yes| SetProcessing[isProcessing = true]
+
+    SetProcessing --> EnsureDir[ensureDirectory outputDir]
+    EnsureDir --> IPC1[IPC: fs.mkdir recursive]
+    IPC1 --> ScanDir[getDirectoryFiles outputDir]
+    ScanDir --> GetItems[getProcessableItems overwrite]
+    GetItems --> Filter[Filter duplicates/existing]
+
+    Filter --> Queue{Queue has items?}
+    Queue -->|No| EndProcessing[isProcessing = false]
+    Queue -->|Yes| CheckConcurrency{activeJobs < concurrency?}
+
+    CheckConcurrency -->|Yes| GetNext[Get next item from queue]
+    CheckConcurrency -->|No| WaitRace[Promise.race wait for job]
+
+    GetNext --> UpdateStatus[updateItemStatus processing]
+    UpdateStatus --> GenPath[Generate output path]
+    GenPath --> Overwrite{overwrite enabled?}
+
+    Overwrite -->|Yes| DeleteCmd[executeCommand del/rm]
+    Overwrite -->|No| BuildCmd
+    DeleteCmd --> BuildCmd[CommandBuilder.buildCommand]
+
+    BuildCmd --> ExecCmd[executeCommand with args]
+    ExecCmd --> Spawn[spawn command args]
+    Spawn --> Exit{Exit code 0?}
+
+    Exit -->|Yes| Success[updateItemStatus completed]
+    Exit -->|No| Error[updateItemStatus error]
+
+    Success & Error --> Decrement[activeJobs--]
+    Decrement --> Queue
+
+    WaitRace --> Queue
+    EndProcessing --> Complete([Console: Processing completed])
 ```
 
 ### 5. Future FFmpeg Integration Flow (Planned)
 
-```
-User clicks "Start Conversion"
-      │
-      ▼
-Generate FFmpeg Command
-      │
-      ├─► Parse conversion settings (format, codec, bitrate, etc.)
-      ├─► Build FFmpeg argument array
-      └─► ffmpeg -i input.mp4 -c:v libx264 -b:v 5M output.mp4
-      │
-      ▼
-Main Process Spawns FFmpeg
-      │
-      ├─► spawn('ffmpeg', args, { ...options })
-      │     │
-      │     ├─► stdout: Parse progress data
-      │     ├─► stderr: Capture FFmpeg output
-      │     └─► on('exit'): Handle completion
-      │
-      ▼
-Real-time Progress Updates
-      │
-      ├─► Parse FFmpeg progress from stderr
-      │     └─► Extract time, duration, frame, fps
-      │
-      ├─► Send progress via IPC event
-      │     └─► win.webContents.send('conversion-progress', data)
-      │
-      └─► Renderer updates UI in real-time
-            └─► Update progress bar, percentage, ETA
+```mermaid
+flowchart TD
+    Start([User clicks Start Conversion]) --> Generate[Generate FFmpeg Command]
+    Generate --> Parse[Parse conversion settings<br/>format, codec, bitrate]
+    Parse --> Build[Build FFmpeg argument array]
+    Build --> Example["ffmpeg -i input.mp4<br/>-c:v libx264 -b:v 5M<br/>output.mp4"]
+
+    Example --> Spawn[Main Process Spawns FFmpeg]
+    Spawn --> SpawnCmd["spawn 'ffmpeg' args"]
+
+    SpawnCmd --> Stdout[stdout: Parse progress data]
+    SpawnCmd --> Stderr[stderr: Capture FFmpeg output]
+    SpawnCmd --> Exit[on exit: Handle completion]
+
+    Stderr --> ParseProgress[Parse FFmpeg progress from stderr]
+    ParseProgress --> Extract[Extract time, duration, frame, fps]
+
+    Extract --> SendIPC[Send progress via IPC event]
+    SendIPC --> WebContents["win.webContents.send<br/>'conversion-progress' data"]
+
+    WebContents --> Renderer[Renderer updates UI in real-time]
+    Renderer --> UpdateUI[Update progress bar, percentage, ETA]
 ```
 
 ---
@@ -385,84 +357,136 @@ App.vue (Root)
 │ │
 │ ├─► Props: (none)
 │ │
-│ ├─► Emits:
-│ │   - add-video-file: (file: FileSystemItem) => void
+│ ├─► Emits: (none - uses Pinia store)
 │ │
 │ └─► Responsibilities:
 │     - Directory navigation (up, home, click)
 │     - File system display
-│     - Video file identification
-│     - Double-click to add to queue
+│     - File/directory selection via checkboxes
+│     - Multi-selection support
+│     - Integration with fileSelection store
 │
-├─┬─ VideoQueue.vue
+├─┬─ ProcessQueue.vue
 │ │
-│ ├─► State: (none - pure presentation)
+│ ├─► State: (none - pure presentation + Pinia store)
 │ │
-│ ├─► Props:
-│ │   - videoFiles: VideoFile[]
+│ ├─► Props: (none - uses fileSelection store)
 │ │
-│ ├─► Emits:
-│ │   - remove-file: (index: number) => void
-│ │   - clear-queue: () => void
+│ ├─► Emits: (none - uses Pinia store)
 │ │
 │ └─► Responsibilities:
-│     - Display queued video files
-│     - Show file status with icons
-│     - Remove individual files
-│     - Clear entire queue
+│     - Display selected files and directories
+│     - Show file status with icons (pending, processing, completed, error, existing)
+│     - Display duplicate file warnings
+│     - Remove individual items
+│     - Clear completed/all items
+│     - Show processing statistics
 │
-└─┬─ ConversionSettings.vue
-  │
-  ├─► State:
-  │   - outputDirectory: string
-  │   - outputDirectoryValid: boolean
-  │
-  ├─► Props:
-  │   - videoFiles: VideoFile[]
-  │   - isProcessing: boolean
-  │
-  ├─► Emits:
-  │   - start-conversion: (outputDir: string) => void
-  │   - stop-conversion: () => void
-  │   - output-directory-changed: (dir: string) => void
-  │
-  └─► Responsibilities:
-      - Output directory selection
-      - Start/Stop conversion buttons
-      - Display queue count
-      - Validate output directory
+├─┬─ ConversionSettings.vue
+│ │
+│ ├─► State:
+│ │   - outputDirectory: string
+│ │   - outputDirectoryValid: boolean
+│ │   - selectedCommand: string
+│ │   - concurrency: number
+│ │   - overwrite: boolean
+│ │   - showOptionsModal: boolean
+│ │
+│ ├─► Props:
+│ │   - isProcessing: boolean
+│ │
+│ ├─► Emits:
+│ │   - start-conversion: (outputDir: string) => void
+│ │   - stop-conversion: () => void
+│ │   - output-directory-changed: (dir: string) => void
+│ │   - options-changed: (options: UserCommandOptions) => void
+│ │   - command-changed: (command: string) => void
+│ │   - concurrency-changed: (value: number) => void
+│ │   - overwrite-changed: (value: boolean) => void
+│ │
+│ └─► Responsibilities:
+│     - Output directory selection
+│     - Command selection from config
+│     - Options configuration button
+│     - Concurrency control (1-4 parallel jobs)
+│     - Overwrite toggle
+│     - Start/Stop processing buttons
+│     - Display selection count
+│
+├─┬─ CommandOptionsModal.vue
+│ │
+│ ├─► State:
+│ │   - activeCategory: string
+│ │   - localOptions: UserCommandOptions
+│ │   - closeOnOverlayClick: boolean
+│ │
+│ ├─► Props:
+│ │   - isOpen: boolean
+│ │   - commandConfig: CommandConfig
+│ │   - commandName: string
+│ │   - config: CommandsConfig
+│ │   - modelValue: UserCommandOptions
+│ │
+│ ├─► Emits:
+│ │   - update:isOpen: (value: boolean) => void
+│ │   - update:modelValue: (value: UserCommandOptions) => void
+│ │
+│ └─► Responsibilities:
+│     - Display command options in categorized tabs
+│     - Show option descriptions and help
+│     - Provide option inputs (text, boolean, select)
+│     - Display command preview
+│     - Reset to defaults
+│     - Save/cancel options
+│
+└─┬─ Options Components (src/components/options/)
+    │
+    ├─┬─ TextOption.vue
+    │ │
+    │ ├─► Props: option, modelValue
+    │ ├─► Emits: update:modelValue
+    │ └─► Responsibilities: Text/number input with validation
+    │
+    ├─┬─ BooleanOption.vue
+    │ │
+    │ ├─► Props: option, modelValue
+    │ ├─► Emits: update:modelValue
+    │ └─► Responsibilities: Toggle switch for boolean flags
+    │
+    ├─┬─ SelectOption.vue
+    │ │
+    │ ├─► Props: option, modelValue
+    │ ├─► Emits: update:modelValue
+    │ └─► Responsibilities: Dropdown selection for predefined options
+    │
+    └─┬─ OptionHelp.vue
+        │
+        ├─► Props: option
+        ├─► Emits: (none)
+        └─► Responsibilities: Display option specification and help tooltip
 ```
 
 ### Component Communication Pattern
 
 **Props Down, Events Up:**
 
-```
-┌─────────────────────────────────────────────┐
-│              App.vue (Parent)               │
-│                                             │
-│  State: videoFiles, isProcessing            │
-└─────────┬───────────────────┬───────────────┘
-          │ Props             │ Props
-          ▼                   ▼
-┌──────────────────┐  ┌─────────────────────┐
-│  FileExplorer    │  │  VideoQueue         │
-│                  │  │                     │
-│  Emits:          │  │  Emits:             │
-│  add-video-file  │  │  remove-file        │
-└──────────────────┘  │  clear-queue        │
-                      └─────────────────────┘
+```mermaid
+graph TB
+    subgraph Parent["App.vue (Parent)"]
+        State["State:<br/>isProcessing<br/>outputDirectory<br/>userOptions<br/>commandName"]
+    end
 
-          │ Props
-          ▼
-┌─────────────────────────────────────────┐
-│     ConversionSettings                  │
-│                                         │
-│  Emits:                                │
-│  - start-conversion                     │
-│  - stop-conversion                      │
-│  - output-directory-changed             │
-└─────────────────────────────────────────┘
+    subgraph Children["Child Components"]
+        direction LR
+        FE["FileExplorer.vue<br/>Uses Pinia Store<br/>No props/emits"]
+        PQ["ProcessQueue.vue<br/>Uses Pinia Store<br/>No props/emits"]
+        CS["ConversionSettings.vue<br/>Props: isProcessing<br/>Emits: start-conversion<br/>stop-conversion<br/>options-changed<br/>command-changed"]
+    end
+
+    State -.->|"Props (isProcessing)"| CS
+    CS -.->|"Events"| State
+
+    FE <-->|"Pinia Store"| PQ
 ```
 
 ### Component Lifecycle
@@ -509,12 +533,14 @@ ipcMain.handle('channel-name', async (event, ...args) => {
 |-------------|-----------|---------|-------------|
 | `get-directory-contents` | Renderer → Main | List directory contents | `Promise<FileSystemItem[]>` |
 | `get-home-directory` | Renderer → Main | Get user home directory | `Promise<string>` |
+| `list-drives` | Renderer → Main | List available drives (Windows) | `Promise<FileSystemItem[]>` |
 | `get-parent-directory` | Renderer → Main | Get parent directory path | `Promise<string>` |
 | `check-if-video-file` | Renderer → Main | Check if file is video | `Promise<boolean>` |
 | `get-file-stats` | Renderer → Main | Get file metadata | `Promise<FileStats \| null>` |
 | `select-directory` | Renderer → Main | Open directory dialog | `Promise<string \| null>` |
-| `copy-file` | Renderer → Main | Copy file (stub) | `Promise<boolean>` |
+| `execute-command` | Renderer → Main | Execute any command with args | `Promise<boolean>` |
 | `ensure-directory` | Renderer → Main | Create directory if needed | `Promise<boolean>` |
+| `get-directory-files` | Renderer → Main | Get file names in directory | `Promise<string[]>` |
 | `main-process-message` | Main → Renderer | Main process ready event | `void` (event) |
 
 ### Type Safety in IPC
@@ -570,59 +596,93 @@ if (!response.success) {
 
 ## State Management
 
-### Application State
+### Pinia Store Architecture
 
-State is managed at the top level in [App.vue](../src/App.vue):
+The application uses **Pinia** for centralized state management. The primary store is [fileSelection.ts](../src/stores/fileSelection.ts).
 
+### File Selection Store ([stores/fileSelection.ts](../src/stores/fileSelection.ts))
+
+**State:**
 ```typescript
-// Lines 38-40
-const videoFiles = ref<VideoFile[]>([])      // Video queue
-const isProcessing = ref<boolean>(false)     // Processing state
-const outputDirectory = ref<string>('')      // Output path
+selectedPaths: Set<string>                    // Set of selected item paths
+selectedItems: Map<string, SelectedItem>      // Full item data map
+duplicateNames: Set<string>                  // Track duplicate filenames
+```
+
+**Computed Getters:**
+```typescript
+selectedList: SelectedItem[]                  // Array of selected items
+selectedCount: number                         // Count of selected items
+hasSelection: boolean                         // Whether any items are selected
+```
+
+**Actions:**
+```typescript
+toggleSelection(item: FileSystemItem)         // Toggle item selection
+isSelected(path: string): boolean             // Check if path is selected
+addItems(items: FileSystemItem[])             // Add multiple items
+removeItem(path: string)                      // Remove single item
+clearSelection()                              // Clear all selections
+clearCompleted()                              // Clear completed/error items
+updateItemStatus(path, status)                // Update processing status
+getItemStatus(path): Status | null            // Get item status
+updateDuplicates()                            // Update duplicate detection
+getProcessableItems(overwrite, outputFiles)   // Get items to process
+```
+
+**Duplicate Detection:**
+- Automatically detects files with duplicate names
+- Marks duplicates with `isDuplicate: true`
+- When overwrite is disabled, duplicates are marked as 'existing' status
+- When overwrite is enabled, all duplicates can be processed
+
+### Application State ([App.vue](../src/App.vue))
+
+Local component state:
+```typescript
+const isProcessing = ref<boolean>(false)          // Processing state
+const outputDirectory = ref<string>('')           // Output path
+const userOptions = ref<UserCommandOptions>({})   // Command options
+const config = ref<CommandsConfig | null>(null)   // Loaded config
+const commandName = ref<string>('cp')             // Selected command
+const concurrency = ref<number>(1)                // Parallel job count
+const overwrite = ref<boolean>(false)             // Overwrite flag
+const activeJobs = ref<number>(0)                 // Active job counter
 ```
 
 ### State Flow Pattern
 
-```
-┌─────────────────────────────────────────────┐
-│         State Management Flow               │
-└─────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph StateDef["1. State Definition (Pinia Store)"]
+        Def1["selectedPaths: Set<string>"]
+        Def2["selectedItems: Map<string, SelectedItem>"]
+        Def3["duplicateNames: Set<string>"]
+    end
 
-1. State Definition (App.vue)
-   │
-   ├─► const videoFiles = ref<VideoFile[]>([])
-   │
-   └─► Reactive state container
+    subgraph StateMutation["2. State Mutation"]
+        Mut1["Direct: toggleSelection item"]
+        Mut2["Store: addItems items[]"]
+        Mut3["Update: updateItemStatus path, status"]
+        Mut4["Clear: clearSelection"]
+    end
 
-2. State Mutation
-   │
-   ├─► Direct modification
-   │   └─► videoFiles.value.push(newFile)
-   │
-   ├─► Filter operations
-   │   └─► videoFiles.value = videoFiles.value.filter(...)
-   │
-   └─► Object updates
-       └─► file.status = 'processing'
+    subgraph StatePropagation["3. State Propagation"]
+        Prop1["Components access store"]
+        Prop2["useFileSelectionStore()"]
+        Prop3["Automatic reactivity"]
+    end
 
-3. State Propagation
-   │
-   ├─► Pass to child via props
-   │   └─► <VideoQueue :video-files="videoFiles" />
-   │
-   └─► Child components receive updates
-       └─► Automatic re-render on change
+    subgraph StateActions["4. Store Actions"]
+        Act1["User clicks checkbox"]
+        Act2["Component calls store action"]
+        Act3["Store updates state"]
+        Act4["Components re-render"]
+    end
 
-4. State Events
-   │
-   ├─► Child emits event
-   │   └─► emit('remove-file', index)
-   │
-   ├─► Parent handles event
-   │   └─► removeVideoFile(index: number)
-   │
-   └─► Parent updates state
-       └─► videoFiles.value.splice(index, 1)
+    StateDef --> StateMutation
+    StateMutation --> StatePropagation
+    StatePropagation --> StateActions
 ```
 
 ### Reactive State Strategy
@@ -753,31 +813,192 @@ const navigateHome = async () => {
 
 ---
 
+## Command Configuration System
+
+### Dynamic Command Loading
+
+The application uses a JSON-based configuration system to define commands and their options dynamically. This allows the UI to adapt to different command-line tools without code changes.
+
+### Configuration File ([public/command-options.json](../public/command-options.json))
+
+**Structure:**
+```typescript
+interface CommandsConfig {
+  commands: {
+    [commandName: string]: CommandConfig
+  }
+}
+
+interface CommandConfig {
+  name: string
+  description: string
+  categories: {
+    [categoryName: string]: OptionCategory
+  }
+}
+
+interface OptionCategory {
+  name: string
+  description: string
+  options: {
+    [optionKey: string]: CommandOption
+  }
+}
+
+interface CommandOption {
+  name: string
+  description: string
+  type: 'text' | 'number' | 'boolean' | 'select' | 'multi-select'
+  flag: string
+  default?: string | number | boolean
+  options?: string[]  // for select types
+  placeholder?: string
+  validation?: string  // regex pattern
+  required?: boolean
+  specification: string
+}
+```
+
+### Command Config Service ([services/commandConfig.ts](../src/services/commandConfig.ts))
+
+**Responsibilities:**
+- Load configuration from JSON file
+- Handle Electron and web environment differences
+- Validate option values
+- Generate command flags from user options
+
+**Key Methods:**
+```typescript
+loadConfig(): Promise<CommandsConfig>
+validateOption(option: CommandOption, value: any): boolean
+generateCommandFlags(userOptions, command, config): string[]
+getCommandConfig(command: string, config): CommandConfig
+```
+
+### Command Builder ([services/commandBuilder.ts](../src/services/commandBuilder.ts))
+
+**Responsibilities:**
+- Build complete command with all flags
+- Generate command preview for UI
+- Apply user options to command template
+
+**Key Methods:**
+```typescript
+buildCommand(commandName, inputPath, outputPath, userOptions, config): {command, args}
+buildPreviewCommand(commandName, userOptions, config): string
+```
+
+### Configuration Loading Flow
+
+```mermaid
+flowchart TD
+    Start([Application Startup]) --> Mounted[App.vue onMounted]
+    Mounted --> LoadConfig[CommandConfigService.loadConfig]
+
+    LoadConfig --> CheckEnv{Environment?}
+
+    CheckEnv -->|Web| WebFetch[Try fetch from web paths]
+    WebFetch --> Path1["/command-options.json"]
+    WebFetch --> Path2["./command-options.json"]
+    WebFetch --> Path3["Absolute URL"]
+
+    CheckEnv -->|Electron| ElectronTry[Try Electron environment]
+    ElectronTry --> FileProtocol["file:// protocol handling"]
+    ElectronTry --> XHR["XMLHttpRequest fallback"]
+
+    Path1 & Path2 & Path3 & FileProtocol & XHR --> Success{Load successful?}
+
+    Success -->|Yes| Cache[Cache config in static variable]
+    Success -->|No| Fallback[Return empty config]
+
+    Cache --> StoreRef[Store in App.vue config ref]
+    StoreRef --> Extract[Extract available commands]
+    Extract --> Display[ConversionSettings displays command selector]
+```
+
+### Option Type Handling
+
+**Text/Number Options:**
+- Input field with placeholder
+- Optional regex validation
+- Required field checking
+- Default value support
+
+**Boolean Options:**
+- Toggle switch UI
+- Only adds flag when true
+- Default to false if unspecified
+
+**Select Options:**
+- Dropdown with predefined choices
+- Supports "none" option to exclude
+- Default value selection
+
+**Multi-Select Options:**
+- Multiple value selection
+- Flag repeated for each value
+- Array of values
+
+### Command Preview
+
+The system provides real-time command preview before execution:
+
+```
+Command: ffmpeg
+Input: video.mp4
+Output: video_converted.mp4
+Options: codec=libx264, bitrate=5M
+
+Generated Preview:
+ffmpeg -i video.mp4 -c:v libx264 -b:v 5M video_converted.mp4
+```
+
+---
+
 ## Video Processing Pipeline
 
-### Current Implementation (Stub)
+### Current Implementation
 
-The current implementation uses file copying as a stub for video conversion:
+The application currently supports generic command execution through a flexible IPC handler:
 
 ```typescript
-// electron/main.ts (lines 157-165)
+// electron/main.ts (lines 209-291)
 
-ipcMain.handle('copy-file', async (_event, sourcePath, destinationPath) => {
-  try {
-    await execAsync(`cp "${sourcePath}" "${destinationPath}"`)
-    return true
-  } catch (error) {
-    console.error('Error copying file:', error)
-    return false
+ipcMain.handle('execute-command', async (_event, command, args) => {
+  // Platform-specific command handling
+  let actualCommand = command
+  let actualArgs = [...args]
+
+  // Windows: convert Unix commands to Windows equivalents
+  if (process.platform === 'win32') {
+    if (command === 'cp') {
+      actualCommand = 'copy'
+      // Adjust args for copy command syntax
+    }
+    // Quote paths with spaces
+    actualArgs = actualArgs.map(arg =>
+      arg.includes(' ') ? `"${arg.replace(/\//g, '\\')}"` : arg.replace(/\//g, '\\')
+    )
   }
+
+  // Spawn process with platform-appropriate settings
+  const childProcess = spawn(actualCommand, actualArgs, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    shell: process.platform === 'win32'
+  })
+
+  // Capture stdout/stderr for logging
+  // Return promise that resolves on exit code 0
 })
 ```
 
-**Why a Stub?**
-- Allows UI development before FFmpeg integration
-- Tests IPC communication patterns
-- Validates file system operations
-- Provides a placeholder for the conversion pipeline
+**Features:**
+- Cross-platform command execution (Windows/Unix)
+- Automatic path quoting for spaces
+- Platform-specific command translation (e.g., cp → copy)
+- Stdout/stderr logging
+- Exit code handling
+- Support for any command-line tool
 
 ### Future FFmpeg Integration Architecture
 
@@ -824,63 +1045,40 @@ ipcMain.handle('copy-file', async (_event, sourcePath, destinationPath) => {
 
 ### Conversion Workflow (Future)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              FFmpeg Conversion Workflow                     │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Start([User starts conversion]) --> Parse[1. Parse Conversion Settings]
 
-User starts conversion
-      │
-      ▼
-1. Parse Conversion Settings
-      ├─► Output format (mp4, mkv, avi, etc.)
-      ├─► Video codec (h264, h265, vp9, etc.)
-      ├─► Audio codec (aac, mp3, opus, etc.)
-      ├─► Bitrate settings
-      ├─► Resolution scaling
-      └─► Additional filters
-      │
-      ▼
-2. Build FFmpeg Command
-      ├─► FFmpegCommandBuilder
-      │     ├─► .withInput(inputPath)
-      │     ├─► .withVideoCodec('libx264')
-      │     ├─► .withBitrate('5M')
-      │     └─► .withOutput(outputPath)
-      │
-      └─► Build args array
-            └─► ['ffmpeg', '-i', 'input.mp4', '-c:v', 'libx264', ...]
-      │
-      ▼
-3. Spawn FFmpeg Process
-      ├─► spawn('ffmpeg', args)
-      │     ├─► stdout: Parse progress
-      │     ├─► stderr: Capture FFmpeg output
-      │     └─► on('exit'): Handle completion
-      │
-      └─► Store process reference
-            └─► Allow cancellation
-      │
-      ▼
-4. Monitor Progress (Real-time)
-      ├─► Parse stderr for progress
-      │     └─► Regex: /time=(\d{2}):(\d{2}):(\d{2})/
-      │
-      ├─► Calculate percentage
-      │     └─► (currentTime / duration) * 100
-      │
-      └─► Send to renderer
-            └─► win.webContents.send('conversion-progress', data)
-      │
-      ▼
-5. Handle Completion
-      ├─► Process exits with code 0
-      │     └─► Success: Update file status to 'completed'
-      │
-      ├─► Process exits with non-zero code
-      │     └─► Error: Update file status to 'error'
-      │
-      └─► Move to next file in queue
+    Parse --> Settings["Output format<br/>Video codec<br/>Audio codec<br/>Bitrate settings<br/>Resolution scaling<br/>Additional filters"]
+
+    Settings --> Build[2. Build FFmpeg Command]
+    Build --> Builder[FFmpegCommandBuilder]
+    Builder --> WithInput[".withInput inputPath"]
+    Builder --> WithVideo[".withVideoCodec 'libx264'"]
+    Builder --> WithBitrate[".withBitrate '5M'"]
+    Builder --> WithOutput[".withOutput outputPath"]
+
+    WithInput & WithVideo & WithBitrate & WithOutput --> ArgsArray["Build args array<br/>['ffmpeg', '-i', 'input.mp4',<br/>'-c:v', 'libx264', ...]"]
+
+    ArgsArray --> Spawn[3. Spawn FFmpeg Process]
+    Spawn --> SpawnCmd["spawn 'ffmpeg' args"]
+    SpawnCmd --> Stdout["stdout: Parse progress"]
+    SpawnCmd --> Stderr["stderr: Capture FFmpeg output"]
+    SpawnCmd --> OnExit["on 'exit': Handle completion"]
+    SpawnCmd --> StoreRef["Store process reference<br/>Allow cancellation"]
+
+    Stderr --> Monitor[4. Monitor Progress Real-time]
+    Monitor --> ParseRegex["Parse stderr for progress<br/>Regex: /time=dd:mm:ss/"]
+    ParseRegex --> CalcPercent["Calculate percentage<br/>currentTime / duration * 100"]
+    CalcPercent --> SendRenderer["Send to renderer<br/>win.webContents.send<br/>'conversion-progress' data"]
+
+    OnExit --> Handle[5. Handle Completion]
+    Handle --> ExitCode{Exit code?}
+
+    ExitCode -->|0| SuccessUpdate["Update file status to 'completed'"]
+    ExitCode -->|Non-zero| ErrorUpdate["Update file status to 'error'"]
+
+    SuccessUpdate & ErrorUpdate --> Next[Move to next file in queue]
 ```
 
 ### Error Handling in Conversion
@@ -1434,23 +1632,42 @@ export interface FileStats {
 
 ```
 ffmpeg-gui/
-├── electron/                    # Main process code
-│   ├── main.ts                 # Entry point, IPC handlers
-│   └── preload.ts              # Preload script (API bridge)
+├── electron/                         # Main process code
+│   ├── main.ts                      # Entry point, IPC handlers
+│   ├── preload.ts                   # Preload script (API bridge)
+│   └── electron-env.d.ts            # Electron TypeScript definitions
 │
-├── src/                        # Renderer process code
-│   ├── components/             # Vue components
-│   │   ├── FileExplorer.vue    # File browser
-│   │   ├── VideoQueue.vue      # Queue manager
-│   │   └── ConversionSettings.vue  # Output configuration
-│   ├── types/                  # TypeScript definitions
-│   │   └── electron.d.ts       # Global types
-│   ├── App.vue                 # Root component
-│   └── main.ts                 # Vue app initialization
+├── src/                              # Renderer process code
+│   ├── components/                   # Vue components
+│   │   ├── FileExplorer.vue          # File browser with navigation
+│   │   ├── ProcessQueue.vue          # Processing queue display
+│   │   ├── ConversionSettings.vue    # Output and command configuration
+│   │   ├── CommandOptionsModal.vue   # Command options editor
+│   │   ├── HelloWorld.vue            # Example component
+│   │   ├── VideoQueue.vue            # Legacy queue component (deprecated)
+│   │   └── options/                  # Option input components
+│   │       ├── TextOption.vue        # Text/number input
+│   │       ├── BooleanOption.vue     # Boolean toggle
+│   │       ├── SelectOption.vue      # Dropdown select
+│   │       └── OptionHelp.vue        # Help tooltip
+│   ├── services/                     # Business logic services
+│   │   ├── commandBuilder.ts         # Command building logic
+│   │   └── commandConfig.ts          # Config loading and validation
+│   ├── stores/                       # Pinia stores
+│   │   └── fileSelection.ts          # File selection state management
+│   ├── types/                        # TypeScript definitions
+│   │   ├── electron.d.ts             # Electron API types
+│   │   ├── command-options.ts        # Command config types
+│   │   └── vite-env.d.ts             # Vite environment types
+│   ├── App.vue                       # Root component
+│   └── main.ts                       # Vue app initialization
 │
-├── docs/                       # Documentation
-│   ├── AGENTS.md              # Documentation hub
-│   ├── architecture.md        # This document
+├── public/                           # Public assets
+│   └── command-options.json          # Command configuration
+│
+├── docs/                             # Documentation
+│   ├── AGENTS.md                     # Documentation hub
+│   ├── architecture.md               # This document
 │   ├── audit_plan.md          # Security audit plan
 │   └── ffmpeg_options_ui_implementation_plan.md  # UI plans
 │
@@ -1468,11 +1685,11 @@ npm install
 # Development mode with hot reload
 npm run dev
 
-# Build for production
+# Build for production (web assets only)
 npm run build
 
-# Build only (no packaging)
-npm run build:quick
+# Build Electron app (unpacked)
+npm run build:electron
 
 # Package application (creates installer)
 npm run dist
@@ -1519,9 +1736,13 @@ npm run electron
 
 **Author**: FFmpeg GUI Development Team
 **Status**: Active - Technical Reference
-**Version**: 1.0.0
-**Last Modified**: 2025-12-27
+**Version**: 1.1.0
+**Last Modified**: 2025-01-08
 **Review Cycle**: Quarterly
+
+**Version History:**
+- 1.1.0 (2025-01-08): Updated for Pinia state management, command configuration system, and generic command execution
+- 1.0.0 (2025-12-27): Initial architecture documentation
 
 ---
 

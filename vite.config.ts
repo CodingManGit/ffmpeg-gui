@@ -1,7 +1,7 @@
-import { defineConfig } from 'vite'
-import path from 'node:path'
-import electron from 'vite-plugin-electron/simple'
 import vue from '@vitejs/plugin-vue'
+import path from 'node:path'
+import { defineConfig } from 'vite'
+import electron from 'vite-plugin-electron/simple'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -29,4 +29,21 @@ export default defineConfig({
   // Ensure static assets are accessible
   publicDir: 'public',
   assetsInclude: ['**/*.json'],
+  build: {
+    rollupOptions: {
+      output: {
+        assetFileNames: (assetInfo) => {
+          // Don't copy bin/ folder to dist (to avoid duplication)
+          if (assetInfo.name && assetInfo.name.includes('bin/')) {
+            return null
+          }
+          // Don't copy command-options.json to dist (will be in resources)
+          if (assetInfo.name === 'command-options.json') {
+            return null
+          }
+          return 'assets/[name]-[hash][extname]'
+        }
+      }
+    }
+  }
 })

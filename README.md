@@ -1,166 +1,147 @@
 # FFmpeg GUI
 
-A modern desktop application for video conversion using FFmpeg, built with Electron and Vue.js.
+A modern desktop application for generic command execution with dynamic configuration, built with Electron and Vue.js 3.
 
-## Features
+## Overview
 
-- 📁 **File Explorer**: Browse and select video files from your system
-- 🎬 **Video Queue**: Manage multiple video files for batch processing
-- ⚙️ **Output Directory Configuration**: Select where converted files will be saved
-- 🔄 **Conversion Processing**: Currently implements file copying as a stub (ready for FFmpeg integration)
-- 📊 **Real-time Status Updates**: Track the progress of each file in the queue
+FFmpeg GUI has evolved from a simple FFmpeg video converter to a **generic command execution framework** that supports any command-line tool through dynamic JSON configuration. The application provides a user-friendly interface for selecting files, configuring command options, and executing batch operations with concurrency control.
 
-## Development
+## Key Features
 
-### Setup
+- 🏗️ **Generic Command Framework**: Support for any command-line tool via JSON configuration
+- 📁 **File System Explorer**: Browse and select files/directories with multi-selection support
+- ⚙️ **Dynamic Command Configuration**: Load commands and options from JSON configuration
+- 🔄 **Batch Processing**: Process multiple files with configurable concurrency (1-4 parallel jobs)
+- 🛡️ **Duplicate Detection**: Automatic detection and handling of duplicate files
+- 📊 **Status Tracking**: Real-time status updates for all processing jobs
+- 🔧 **Cross-Platform**: Works on Windows and Unix systems
+
+## Quick Start
+
+### Prerequisites
+- Node.js (v18 or higher)
+- npm or yarn
+- Command-line tools you want to use (e.g., FFmpeg for video conversion)
+
+### Installation
 ```bash
+# Install dependencies
 npm install
-```
 
-### Development (Vite + Vue.js)
-```bash
+# Run in development mode
 npm run dev
-```
 
-### Build and Run Electron App
-```bash
-# Quick build (for testing)
-npm run dev:electron
-
-# Full build (includes packaging)
+# Build for production (renderer process only)
 npm run build
-```
 
-### Run Built Application
-```bashA
-npm run electron
+# Build Electron app (unpacked, no installer)
+npm run build:electron
+
+# Package the application (creates installers)
+npm run dist
 ```
 
 ## Usage
 
-1. **Add Video Files**: Use the file explorer on the left to browse your system and add video files to the processing queue
-2. **Configure Output**: In the conversion settings panel, click "Browse" to select where processed files should be saved
-3. **Start Processing**: Click "Start Conversion" to begin processing files (currently copies files as a stub)
-4. **Monitor Progress**: Watch the status updates for each file in the queue
-
-## Current Implementation
-
-The application currently implements a **stub conversion process** that copies files to the output directory using the system `cp` command. This serves as a foundation for integrating actual FFmpeg conversion functionality.
-
-## Next Steps
-
-- Replace the copy stub with actual FFmpeg conversion commands
-- Add conversion format options (MP4, AVI, etc.)
-- Implement progress tracking for longer conversions
-- Add conversion quality settings
-- Support for audio extraction and conversion
+1. **Browse Files**: Use the file explorer to navigate and select files/directories
+2. **Select Command**: Choose a command from the dropdown (loaded from configuration)
+3. **Configure Options**: Click "Configure Options" to set command parameters
+4. **Set Output Directory**: Select where processed files should be saved
+5. **Start Processing**: Click "Start Processing" to begin batch execution
 
 ## Architecture
 
-- **Frontend**: Vue.js 3 with TypeScript
-- **Backend**: Electron main process with Node.js
-- **IPC Communication**: Secure communication between renderer and main process
-- **File Operations**: Native file system access with proper error handling
+The application follows Electron's multi-process architecture:
 
----
+- **Main Process** (`electron/main.ts`): Handles file system operations and command execution
+- **Renderer Process** (`src/`): Vue.js 3 application with TypeScript and Composition API
+- **Preload Script** (`electron/preload.ts`): Secure API bridge between processes
+- **State Management**: Pinia stores for centralized state management
+- **Dynamic Configuration**: JSON-based command definitions in `public/command-options.json`
 
-# Original Architecture Design Document
+### Key Components
+- **FileExplorer.vue**: File browser with navigation and multi-selection
+- **ProcessQueue.vue**: Processing queue display with status tracking
+- **ConversionSettings.vue**: Command selection and output configuration
+- **CommandOptionsModal.vue**: Command options editor with categorized tabs
 
-This document outlines the architecture and design for a desktop application that provides a user-friendly graphical interface for FFmpeg. The application will allow users to select video files, configure FFmpeg conversion settings (e.g., target format like H.265), and specify an output directory.
+## Configuration
 
-## Overall Architecture and Design
+Commands are defined in `public/command-options.json` using a flexible schema:
+```json
+{
+  "commands": {
+    "cp": {
+      "name": "Copy Files",
+      "description": "Copy files to destination directory",
+      "categories": [
+        {
+          "name": "Basic",
+          "options": [
+            {
+              "name": "preserve",
+              "type": "boolean",
+              "description": "Preserve file attributes",
+              "default": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
 
-The application will follow a client-server architecture, where the Electron.js application acts as the frontend (client) and a separate backend process handles the FFmpeg operations. This separation allows for better organization, scalability, and potentially running FFmpeg operations in a dedicated process without blocking the UI.
+## Development
 
-### 1. Frontend (Electron.js)
+### Project Structure
+```
+ffmpeg-gui/
+├── electron/          # Electron main process
+├── src/              # Vue.js 3 application
+│   ├── components/   # Vue components
+│   ├── services/     # Business logic
+│   ├── stores/       # Pinia stores
+│   └── types/        # TypeScript definitions
+├── public/           # Static assets and configuration
+└── docs/             # Documentation
+```
 
-The frontend will be built using Electron.js, providing a cross-platform desktop application experience. It will be responsible for:
+### Development Commands
+```bash
+# Development with hot reload
+npm run dev
 
-*   **User Interface (UI):** A clean and intuitive UI for selecting input video files, configuring FFmpeg options, and monitoring conversion progress.
-*   **File System Interaction:** Browsing and selecting video files from the user's file system.
-*   **Configuration Management:** Storing and retrieving user preferences, such as default output directory and frequently used FFmpeg settings.
-*   **Communication with Backend:** Sending conversion requests and receiving progress updates/completion notifications from the backend.
-*   **Error Handling and Feedback:** Displaying appropriate error messages and success notifications to the user.
+# Build web assets (production)
+npm run build
 
-**Key UI Components:**
+# Build Electron app (unpacked)
+npm run build:electron
 
-*   **File Selector:** A button or drag-and-drop area to add video files.
-*   **File List:** A list displaying the selected video files, potentially with options to remove or reorder them.
-*   **FFmpeg Options Panel:**
-    *   **Format Selection:** Dropdown for common output formats (e.g., H.265, MP4, WebM).
-    *   **Codec Options:** Sliders/inputs for bitrate, quality, etc. (depending on selected format/codec).
-    *   **Advanced Options (Optional):** A text area for users to input custom FFmpeg arguments.
-*   **Output Directory Selector:** A button to browse and select the output folder.
-*   **Conversion Progress Bar/Log:** To show the status of ongoing conversions.
-*   **Start/Stop Conversion Buttons.**
+# Package application for distribution
+npm run dist
 
-### 2. Backend (Node.js with `child_process` for FFmpeg)
+# Run built Electron app
+npm run electron
 
-The backend will be a Node.js process, potentially spawned by the Electron
+# Clean build outputs
+npm run clean
+```
 
-## Getting Started
+## Documentation
 
-### Prerequisites
+For comprehensive technical documentation, see:
+- **[docs/architecture.md](docs/architecture.md)** - Detailed technical architecture and design
+- **[docs/AGENTS.md](docs/AGENTS.md)** - Project documentation hub and AI agent guidelines
 
-*   Node.js (which includes npm)
-*   FFmpeg installed and accessible in your system's PATH.
+## Contributing
 
-### Installation and Running
+1. Follow TypeScript strict mode guidelines
+2. Use Vue 3 Composition API with `<script setup>` syntax
+3. Maintain type safety throughout
+4. Add new commands via JSON configuration
+5. Test cross-platform compatibility
 
-1.  Clone the repository and navigate into the project directory.
-2.  Install the dependencies:
-    ```bash
-    npm install
-    ```
-3.  Start the application:
-    ```bash
-    npm run dev
-    ```
+## License
 
-## Current Implementation Status
-
-### ✅ Completed Features
-
-1. **File Explorer Sidebar**
-   - Navigate through the file system starting from the home directory
-   - Breadcrumb navigation for easy path traversal
-   - Visual distinction between directories and video files
-   - Support for common video formats (MP4, AVI, MKV, MOV, etc.)
-   - File size display for video files
-   - Click to navigate directories, double-click to add video files to queue
-
-2. **Video Processing Queue**
-   - Display selected video files with their paths and sizes
-   - Remove individual files or clear entire queue
-   - Status indicators (pending, processing, completed, error)
-   - Start/stop processing controls
-   - Prevent duplicates from being added to the queue
-
-3. **User Interface**
-   - Clean, modern design with sidebar layout
-   - Responsive file explorer with navigation controls
-   - Visual feedback for file types and processing status
-   - Proper error handling and loading states
-
-### 🚧 Next Steps
-
-1. **FFmpeg Integration**
-   - Implement actual video conversion using FFmpeg
-   - Add conversion options (format, quality, bitrate settings)
-   - Progress tracking for individual file conversions
-   - Output directory selection
-
-2. **Enhanced Features**
-   - Drag and drop support for adding files
-   - Batch processing options
-   - Conversion presets
-   - Preview functionality
-   - Detailed conversion logs
-
-### Architecture
-
-The application uses:
-- **Frontend**: Vue 3 with TypeScript for the user interface
-- **Backend**: Electron main process for file system operations
-- **IPC Communication**: Secure communication between renderer and main processes
-- **File System**: Native Node.js APIs for directory traversal and file operations
+This project is under active development.

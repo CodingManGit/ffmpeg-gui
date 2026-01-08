@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import type { FileSystemItem } from '../src/types/electron'
 
 // --------- Expose some API to the Renderer process ---------
@@ -41,4 +41,8 @@ contextBridge.exposeInMainWorld('fileSystemAPI', {
 contextBridge.exposeInMainWorld('commandAPI', {
   executeCommand: (command: string, args: string[]) =>
     ipcRenderer.invoke('execute-command', command, args),
+  getCommandConfig: () =>
+    ipcRenderer.invoke('get-command-config'),
+  getPathToBinary: (binaryName: string) =>
+    ipcRenderer.invoke('get-path-to-binary', binaryName),
 })
