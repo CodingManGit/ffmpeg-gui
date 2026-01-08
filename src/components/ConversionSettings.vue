@@ -9,7 +9,7 @@
         <label for="command-select">Command:</label>
         <select
           id="command-select"
-          v-model="commandName"
+          v-model="localCommandName"
           class="command-select"
           :disabled="isProcessing"
         >
@@ -108,7 +108,7 @@
       v-if="commandConfig"
       :is-open="isModalOpen"
       :command-config="commandConfig"
-      :command-name="commandName"
+      :command-name="localCommandName"
       :config="config"
       :model-value="localOptions"
       @update:is-open="isModalOpen = $event"
@@ -118,14 +118,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import type { UserCommandOptions, CommandsConfig } from '../types/command-options'
+import { computed, onMounted, ref, watch } from 'vue'
 import { CommandConfigService } from '../services/commandConfig'
 import { useFileSelectionStore } from '../stores/fileSelection'
+import type { CommandsConfig, UserCommandOptions } from '../types/command-options'
 import CommandOptionsModal from './CommandOptionsModal.vue'
 
 const props = defineProps<{
   isProcessing: boolean
+  commandName: string
 }>()
 
 const emit = defineEmits<{
@@ -146,8 +147,13 @@ const isModalOpen = ref(false)
 const concurrency = ref<number>(1)
 const overwrite = ref<boolean>(false)
 
-// Command to use for conversion (can be 'cp' for testing or 'ffmpeg' for production)
-const commandName = ref<string>('cp') // Change to 'ffmpeg' when ready
+// Local state for command name (synced with prop)
+const localCommandName = ref(props.commandName)
+
+// Watch for prop changes
+watch(() => props.commandName, (newCommand) => {
+  localCommandName.value = newCommand
+})
 
 // Available commands from config
 const availableCommands = computed(() => {
@@ -157,7 +163,7 @@ const availableCommands = computed(() => {
 // Selected command config
 const commandConfig = computed(() => {
   if (!config.value) return null
-  return CommandConfigService.getCommandConfig(commandName.value, config.value)
+  return CommandConfigService.getCommandConfig(localCommandName.value, config.value)
 })
 
 // Description of selected command
@@ -185,17 +191,20 @@ const optionsSummary = computed(() => {
 onMounted(async () => {
   try {
     config.value = await CommandConfigService.loadConfig()
-    // Initialize with defaults
-    if (config.value && commandConfig.value) {
-      const defaults: UserCommandOptions = {}
-      for (const category of Object.values(commandConfig.value.categories)) {
-        for (const [key, option] of Object.entries(category.options)) {
-          if (option.default !== undefined) {
-            defaults[key] = option.default
+    // Initialize with defaults if we have a valid command
+    if (config.value && localCommandName.value) {
+      const cmdConfig = CommandConfigService.getCommandConfig(localCommandName.value, config.value)
+      if (cmdConfig) {
+        const defaults: UserCommandOptions = {}
+        for (const category of Object.values(cmdConfig.categories)) {
+          for (const [key, option] of Object.entries(category.options)) {
+            if (option.default !== undefined) {
+              defaults[key] = option.default
+            }
           }
         }
+        localOptions.value = defaults
       }
-      localOptions.value = defaults
     }
   } catch (error) {
     console.error('Failed to load command configuration:', error)
@@ -203,7 +212,7 @@ onMounted(async () => {
 })
 
 // Watch for command changes to reset options with defaults
-watch(commandName, async (newCommand) => {
+watch(localCommandName, async (newCommand) => {
   if (config.value) {
     const cmdConfig = CommandConfigService.getCommandConfig(newCommand, config.value)
     if (cmdConfig) {
@@ -265,7 +274,7 @@ watch(overwrite, (newValue) => {
 // Expose options, command, concurrency, and overwrite for parent component
 defineExpose({
   getOptions: () => localOptions.value,
-  getCommand: () => commandName.value,
+  getCommand: () => localCommandName.value,
   getConcurrency: () => concurrency.value,
   getOverwrite: () => overwrite.value
 })

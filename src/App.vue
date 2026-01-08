@@ -5,8 +5,8 @@
         <FileExplorer />
         <div class="conversion-settings-inline">
           <ConversionSettings
-            ref="conversionSettingsRef"
             :is-processing="isProcessing"
+            :command-name="commandName"
             @start-conversion="startConversion"
             @stop-conversion="stopConversion"
             @output-directory-changed="updateOutputDirectory"
@@ -40,8 +40,7 @@ const isProcessing = ref(false)
 const outputDirectory = ref<string>('')
 const userOptions = ref<UserCommandOptions>({})
 const config = ref<CommandsConfig | null>(null)
-const conversionSettingsRef = ref<InstanceType<typeof ConversionSettings> | null>(null)
-const commandName = ref<string>('cp')
+const commandName = ref<string>('')
 const concurrency = ref<number>(1)
 const overwrite = ref<boolean>(false)
 const activeJobs = ref<number>(0)
@@ -51,8 +50,12 @@ const loadConfig = async () => {
   try {
     config.value = await CommandConfigService.loadConfig()
     console.log('App: Config loaded successfully', config.value)
-    if (config.value) {
+    if (config.value && Object.keys(config.value.commands).length > 0) {
       console.log('App: Available commands:', Object.keys(config.value.commands))
+      // Set first available command as default
+      const firstCommand = Object.keys(config.value.commands)[0]
+      commandName.value = firstCommand
+      console.log('App: Default command set to:', firstCommand)
     }
   } catch (error) {
     console.error('Failed to load command configuration:', error)

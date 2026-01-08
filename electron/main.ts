@@ -83,10 +83,11 @@ function createWindow() {
   // Open DevTools in development to debug
   if (VITE_DEV_SERVER_URL) {
     win.webContents.openDevTools()
-  } else {
-    // Also open in production to debug loading issues
-    win.webContents.openDevTools()
   }
+  // else {
+  //   // Also open in production to debug loading issues
+  //   win.webContents.openDevTools()
+  // }
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)

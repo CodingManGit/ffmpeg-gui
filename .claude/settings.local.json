@@ -6,7 +6,8 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "Bash(npm run clean:*)",
-      "Bash(npx electron-builder:*)"
+      "Bash(npx electron-builder:*)",
+      "Bash(npm run build:electron:*)"
     ]
   }
 }

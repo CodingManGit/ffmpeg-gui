@@ -48,6 +48,6 @@ contextBridge.exposeInMainWorld('commandAPI', {
 })
 
 // Expose platform information
-contextBridge.exposeInMain('platformAPI', {
+contextBridge.exposeInMainWorld('platformAPI', {
   platform: () => ipcRenderer.invoke('get-platform'),
 })

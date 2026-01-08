@@ -1,12 +1,42 @@
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import fs from 'node:fs'
 import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron/simple'
+import type { Plugin } from 'vite'
+
+// Plugin to exclude files/folders from public directory being copied to dist
+function excludeFromPublic(exclude: string[]): Plugin {
+  return {
+    name: 'exclude-from-public',
+    apply: 'build',
+    enforce: 'post',
+    closeBundle() {
+      const outDir = path.resolve(process.cwd(), 'dist')
+      if (!fs.existsSync(outDir)) return
+
+      exclude.forEach(item => {
+        const targetPath = path.join(outDir, item)
+        if (fs.existsSync(targetPath)) {
+          const stat = fs.statSync(targetPath)
+          if (stat.isDirectory()) {
+            fs.rmSync(targetPath, { recursive: true, force: true })
+            console.log(`[Vite] Excluded directory from build: ${item}`)
+          } else {
+            fs.unlinkSync(targetPath)
+            console.log(`[Vite] Excluded file from build: ${item}`)
+          }
+        }
+      })
+    }
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
+    excludeFromPublic(['bin', 'command-options.json']),
     electron({
       main: {
         // Shortcut of `build.lib.entry`.
@@ -28,6 +58,9 @@ export default defineConfig({
   ],
   // Use absolute paths for production builds
   base: process.env.NODE_ENV === 'production' ? './' : '/',
-  // Ensure static assets are accessible
+
+  // Custom plugin to exclude bin/ and command-options.json from being copied to dist
+  // These should only be in resources/ via extraResources, not in asar
   publicDir: 'public',
+  assetsInclude: ['**/*.svg', '**/*.png'],
 })
