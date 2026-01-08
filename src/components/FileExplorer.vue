@@ -117,8 +117,8 @@ const pathSegments = computed(() => {
     return [{ name: '/', path: '/' }]
   }
 
-  // Handle Windows paths like "C:/Users/..."
-  const windowsPathRegex = /^([A-Z]):\/(.*)$/
+  // Handle Windows paths like "C:/Users/..." or "/C:/Users/..."
+  const windowsPathRegex = /^\/?([A-Z]):\/(.*)$/
   const match = currentPath.value.match(windowsPathRegex)
 
   if (match) {
@@ -129,10 +129,10 @@ const pathSegments = computed(() => {
 
     const result = [
       { name: '/', path: '/' },
-      { name: `/${drive}/`, path: currentPath.value }
+      { name: `${drive}:`, path: `${drive}:/` }
     ]
 
-    let accPath = `/${drive}`
+    let accPath = `${drive}:`
     for (const segment of segments) {
       accPath += '/' + segment
       result.push({ name: segment, path: accPath })

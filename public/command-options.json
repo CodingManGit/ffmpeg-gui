@@ -73,9 +73,9 @@
               "type": "select",
               "flag": "-c:v",
               "default": "libx264",
-              "options": ["libx264", "libx265", "libvpx", "libvpx-vp9"],
+              "options": ["libx264", "libx265", "libvpx", "libvpx-vp9", "h264_nvenc", "hevc_nvenc"],
               "required": false,
-              "specification": "The video codec determines how video data is compressed. libx264 is widely compatible, libx265 offers better compression, libvpx is for WebM format."
+              "specification": "The video codec determines how video data is compressed. libx264 is widely compatible, libx265 offers better compression, libvpx is for WebM format. h264_nvenc and hevc_nvenc are NVIDIA hardware-accelerated encoders for faster encoding."
             },
             "bitrate": {
               "name": "Video Bitrate",
@@ -134,6 +134,30 @@
               "default": "mp4",
               "options": ["mp4", "avi", "mkv", "webm", "mov"],
               "specification": "The output format determines the container. MP4 is widely compatible, MKV supports many codecs, WebM is web-optimized, AVI is legacy format."
+            }
+          }
+        },
+        "hardware": {
+          "name": "Hardware Acceleration",
+          "description": "GPU hardware acceleration options for faster encoding/decoding",
+          "options": {
+            "hwaccel": {
+              "name": "Hardware Acceleration Method",
+              "description": "Select hardware acceleration API to use",
+              "type": "select",
+              "flag": "-hwaccel",
+              "default": "none",
+              "options": ["none", "cuda", "dxva2", "qsv", "d3d11va"],
+              "specification": "Hardware acceleration API for faster video decoding. CUDA for NVIDIA GPUs, DXVA2 for Windows DirectX, QSV for Intel Quick Sync, D3D11VA for Direct3D 11."
+            },
+            "hwaccel_output_format": {
+              "name": "Hardware Output Format",
+              "description": "Format for hardware-accelerated frames",
+              "type": "select",
+              "flag": "-hwaccel_output_format",
+              "default": "none",
+              "options": ["none", "cuda", "nv12", "p010", "d3d11"],
+              "specification": "Output format for hardware-accelerated frames. Must match the hardware acceleration method. 'cuda' for NVIDIA CUDA, 'nv12'/'p010' for DXVA2/QSV, 'd3d11' for D3D11VA."
             }
           }
         }

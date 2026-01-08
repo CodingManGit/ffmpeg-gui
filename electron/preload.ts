@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('fileSystemAPI', {
   copyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke('copy-file', sourcePath, destinationPath),
   ensureDirectory: (dirPath: string) => ipcRenderer.invoke('ensure-directory', dirPath),
   listDrives: (): Promise<FileSystemItem[]> => ipcRenderer.invoke('list-drives'),
+  getDirectoryFiles: (dirPath: string): Promise<string[]> => ipcRenderer.invoke('get-directory-files', dirPath),
 })
 
 // Expose command execution APIs

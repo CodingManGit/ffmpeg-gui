@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc && vite build && electron-builder",
     "build:quick": "vue-tsc && vite build",
+    "build:dev": "vue-tsc && vite build",
     "preview": "vite preview",
     "electron": "electron dist-electron/main.js",
     "electron:dev": "electron .",

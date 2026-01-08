@@ -215,30 +215,38 @@ app.whenReady().then(() => {
       let actualArgs = [...args]
 
       if (process.platform === 'win32') {
-        // Convert forward slashes back to Windows backslashes for actual execution
-        actualArgs = args.map(arg => arg.replace(/\//g, '\\'))
-
         // On Windows, convert Unix commands to Windows equivalents
         if (command === 'cp') {
           actualCommand = 'copy'
           // copy uses: copy source destination
           actualArgs = [
-            actualArgs[0], // source
-            actualArgs[actualArgs.length - 1] // destination (last arg)
+            actualArgs[0], // source (already has forward slashes from renderer)
+            actualArgs[actualArgs.length - 1] // destination (already has forward slashes from renderer)
           ]
         }
+
+        // When using shell: true, we need to escape paths with spaces
+        // On Windows with shell, paths with spaces need to be quoted
+        actualArgs = actualArgs.map(arg => {
+          // Convert forward slashes to backslashes for Windows paths
+          const windowsPath = arg.replace(/\//g, '\\')
+          // Quote if contains spaces
+          if (windowsPath.includes(' ')) {
+            return `"${windowsPath}"`
+          }
+          return windowsPath
+        })
+      } else {
+        // On Unix, quote arguments that contain spaces
+        actualArgs = actualArgs.map(arg => {
+          if (arg.includes(' ')) {
+            return `"${arg}"`
+          }
+          return arg
+        })
       }
 
-      // Quote arguments that contain spaces
-      const quotedArgs = actualArgs.map(arg => {
-        // If the argument contains spaces, quote it
-        if (arg.includes(' ')) {
-          return `"${arg}"`
-        }
-        return arg
-      })
-
-      const childProcess = spawn(actualCommand, quotedArgs, {
+      const childProcess = spawn(actualCommand, actualArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: process.platform === 'win32' // Use shell on Windows for better compatibility
       })
@@ -290,6 +298,31 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error('Error creating directory:', error)
       return false
+    }
+  })
+
+  // Get directory file names (for conflict detection)
+  ipcMain.handle('get-directory-files', async (_event: any, dirPath: string) => {
+    try {
+      const items = await fs.readdir(dirPath)
+      // Return only file names (not directories)
+      const result: string[] = []
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item)
+        try {
+          const stat = await fs.stat(fullPath)
+          if (stat.isFile()) {
+            result.push(item)
+          }
+        } catch {
+          // Skip if can't stat
+        }
+      }
+      return result
+    } catch (error) {
+      console.error('Error reading directory files:', error)
+      // If directory doesn't exist, return empty array
+      return []
     }
   })
 })

@@ -52,6 +52,39 @@
         </div>
       </div>
 
+      <div class="setting-item">
+        <div class="concurrency-row">
+          <div class="concurrency-input">
+            <label for="concurrency-select">Concurrency:</label>
+            <select
+              id="concurrency-select"
+              v-model.number="concurrency"
+              class="concurrency-select"
+              :disabled="isProcessing"
+            >
+              <option v-for="n in 10" :key="n" :value="n">
+                {{ n }} job{{ n > 1 ? 's' : '' }}
+              </option>
+            </select>
+          </div>
+          <div class="overwrite-checkbox">
+            <label for="overwrite-checkbox" class="checkbox-label">
+              <input
+                id="overwrite-checkbox"
+                type="checkbox"
+                v-model="overwrite"
+                :disabled="isProcessing"
+                class="checkbox-input"
+              />
+              Overwrite
+            </label>
+          </div>
+        </div>
+        <div class="concurrency-info">
+          Process up to {{ concurrency }} file{{ concurrency > 1 ? 's' : '' }} simultaneously
+        </div>
+      </div>
+
       <div class="conversion-actions">
         <button
           @click="startConversion"
@@ -101,6 +134,8 @@ const emit = defineEmits<{
   'output-directory-changed': [outputDir: string]
   'options-changed': [options: UserCommandOptions]
   'command-changed': [command: string]
+  'concurrency-changed': [concurrency: number]
+  'overwrite-changed': [overwrite: boolean]
 }>()
 
 const fileStore = useFileSelectionStore()
@@ -108,6 +143,8 @@ const outputDirectory = ref<string>('')
 const config = ref<CommandsConfig | null>(null)
 const localOptions = ref<UserCommandOptions>({})
 const isModalOpen = ref(false)
+const concurrency = ref<number>(1)
+const overwrite = ref<boolean>(false)
 
 // Command to use for conversion (can be 'cp' for testing or 'ffmpeg' for production)
 const commandName = ref<string>('cp') // Change to 'ffmpeg' when ready
@@ -215,10 +252,22 @@ const stopConversion = () => {
   emit('stop-conversion')
 }
 
-// Expose options and command for parent component
+// Watch for concurrency changes
+watch(concurrency, (newValue) => {
+  emit('concurrency-changed', newValue)
+})
+
+// Watch for overwrite changes
+watch(overwrite, (newValue) => {
+  emit('overwrite-changed', newValue)
+})
+
+// Expose options, command, concurrency, and overwrite for parent component
 defineExpose({
   getOptions: () => localOptions.value,
-  getCommand: () => commandName.value
+  getCommand: () => commandName.value,
+  getConcurrency: () => concurrency.value,
+  getOverwrite: () => overwrite.value
 })
 </script>
 
@@ -398,5 +447,78 @@ defineExpose({
   font-size: 11px;
   color: #6c757d;
   font-style: italic;
+}
+
+.concurrency-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 12px;
+  background-color: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.concurrency-select:focus {
+  outline: none;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.concurrency-select:hover:not(:disabled) {
+  border-color: #adb5bd;
+}
+
+.concurrency-select:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.concurrency-info {
+  font-size: 11px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.concurrency-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.concurrency-input {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overwrite-checkbox {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #495057;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.checkbox-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 </style>

@@ -35,6 +35,7 @@ declare global {
       copyFile(sourcePath: string, destinationPath: string): Promise<boolean>
       ensureDirectory(dirPath: string): Promise<boolean>
       listDrives(): Promise<FileSystemItem[]>
+      getDirectoryFiles(dirPath: string): Promise<string[]>
     }
     commandAPI: {
       executeCommand(command: string, args: string[]): Promise<boolean>

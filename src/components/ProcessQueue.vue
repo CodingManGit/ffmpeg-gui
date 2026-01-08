@@ -38,13 +38,18 @@
         :class="{
           'processing': item.status === 'processing',
           'completed': item.status === 'completed',
-          'error': item.status === 'error'
+          'error': item.status === 'error',
+          'existing': item.status === 'existing',
+          'duplicate': item.isDuplicate
         }"
       >
         <div class="file-info">
           <div class="file-icon">{{ getFileIcon(item) }}</div>
           <div class="file-details">
-            <div class="file-name" :title="item.name">{{ item.name }}</div>
+            <div class="file-name" :title="item.name">
+              {{ item.name }}
+              <span v-if="item.isDuplicate" class="duplicate-badge" title="Duplicate filename">⚠️</span>
+            </div>
             <div class="file-path" :title="item.path">{{ item.path }}</div>
           </div>
         </div>
@@ -108,6 +113,7 @@ const getStatusText = (status: SelectedItem['status']): string => {
     case 'processing': return 'Processing'
     case 'completed': return 'Completed'
     case 'error': return 'Error'
+    case 'existing': return 'Existing'
     default: return 'Unknown'
   }
 }
@@ -225,6 +231,15 @@ const clearAll = () => {
   border-left: 4px solid #dc3545;
 }
 
+.file-item.existing {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+}
+
+.file-item.duplicate {
+  opacity: 0.6;
+}
+
 .file-info {
   display: flex;
   align-items: center;
@@ -261,6 +276,11 @@ const clearAll = () => {
   text-overflow: ellipsis;
 }
 
+.duplicate-badge {
+  margin-left: 6px;
+  font-size: 14px;
+}
+
 .file-status {
   margin: 0 12px;
 }
@@ -290,6 +310,11 @@ const clearAll = () => {
 .status-indicator.error {
   background: #f8d7da;
   color: #721c24;
+}
+
+.status-indicator.existing {
+  background: #fff3cd;
+  color: #856404;
 }
 
 .file-actions {

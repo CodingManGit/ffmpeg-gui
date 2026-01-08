@@ -1,7 +1,4 @@
-import type { CommandsConfig, CommandOption, UserCommandOptions } from '../types/command-options'
-
-// Import the config directly as raw text - Vite will inline it
-import commandOptionsJson from '../config/command-options.json?raw'
+import type { CommandOption, CommandsConfig, UserCommandOptions } from '../types/command-options'
 
 export class CommandConfigService {
   private static config: CommandsConfig | null = null
@@ -9,14 +6,142 @@ export class CommandConfigService {
   static async loadConfig(): Promise<CommandsConfig> {
     if (this.config) return this.config
 
-    // Parse the imported JSON
     try {
-      this.config = JSON.parse(commandOptionsJson) as CommandsConfig
-      console.log('Loaded command config from bundled config')
-      return this.config!
+      // Check if we're in Electron and use appropriate method
+      const isElectron = typeof window !== 'undefined' && 
+                        (window as any).ipcRenderer !== undefined
+      
+      if (isElectron) {
+        // In Electron, we might need to load the file differently
+        // Try multiple approaches
+        return await this.loadConfigForElectron()
+      } else {
+        // Regular web environment - use fetch
+        return await this.loadConfigForWeb()
+      }
+      
     } catch (error) {
       console.error('Failed to load command config:', error)
-      throw new Error('Configuration file not found or invalid')
+      // Fallback to empty config if file not found
+      return this.getEmptyConfig()
+    }
+  }
+
+  private static async loadConfigForWeb(): Promise<CommandsConfig> {
+    // Try multiple possible paths for the config file
+    const possiblePaths = [
+      '/command-options.json',
+      './command-options.json',
+      'command-options.json'
+    ]
+    
+    let lastError: Error | null = null
+    
+    for (const path of possiblePaths) {
+      try {
+        const response = await fetch(path)
+        if (response.ok) {
+          const commandOptionsJson = await response.text()
+          this.config = JSON.parse(commandOptionsJson) as CommandsConfig
+          console.log(`Loaded command config from: ${path}`)
+          return this.config!
+        }
+      } catch (error) {
+        lastError = error as Error
+        console.warn(`Failed to load config from ${path}:`, error)
+      }
+    }
+    
+    // If all fetch attempts failed, try to load from window.location
+    if (typeof window !== 'undefined' && window.location) {
+      const baseUrl = window.location.origin
+      const configUrl = `${baseUrl}/command-options.json`
+      try {
+        const response = await fetch(configUrl)
+        if (response.ok) {
+          const commandOptionsJson = await response.text()
+          this.config = JSON.parse(commandOptionsJson) as CommandsConfig
+          console.log(`Loaded command config from absolute URL: ${configUrl}`)
+          return this.config!
+        }
+      } catch (error) {
+        lastError = error as Error
+      }
+    }
+    
+    throw lastError || new Error('All config loading attempts failed')
+  }
+
+  private static async loadConfigForElectron(): Promise<CommandsConfig> {
+    console.log('Attempting to load config in Electron environment...')
+    console.log('Window location:', window.location.href)
+    console.log('Window protocol:', window.location.protocol)
+    
+    // Try multiple paths for Electron
+    const pathsToTry = [
+      'command-options.json',           // Relative to current page
+      './command-options.json',         // Same directory
+      '/command-options.json',          // Root directory
+      'file:///command-options.json',   // Absolute file path
+    ]
+    
+    // If we're running from file://, try to construct the path
+    if (window.location.protocol === 'file:') {
+      const basePath = window.location.pathname
+      const dirPath = basePath.substring(0, basePath.lastIndexOf('/'))
+      pathsToTry.push(`file://${dirPath}/command-options.json`)
+      pathsToTry.push(`${dirPath}/command-options.json`)
+      console.log('File:// URL detected, base path:', dirPath)
+    }
+    
+    for (const path of pathsToTry) {
+      console.log(`Trying to fetch from: ${path}`)
+      try {
+        const response = await fetch(path)
+        console.log(`Fetch response for ${path}:`, response.status, response.statusText)
+        
+        if (response.ok) {
+          const commandOptionsJson = await response.text()
+          console.log(`Successfully loaded config from: ${path}`)
+          console.log('Config content length:', commandOptionsJson.length)
+          this.config = JSON.parse(commandOptionsJson) as CommandsConfig
+          console.log('Config commands available:', Object.keys(this.config.commands))
+          if (this.config.commands.ffmpeg) {
+            console.log('FFmpeg categories:', Object.keys(this.config.commands.ffmpeg.categories))
+          }
+          return this.config!
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch from ${path}:`, error)
+      }
+    }
+    
+    // If fetch doesn't work, try XMLHttpRequest (older but sometimes works better with file://)
+    console.log('Fetch attempts failed, trying XMLHttpRequest...')
+    for (const path of pathsToTry) {
+      try {
+        const xhr = new XMLHttpRequest()
+        xhr.open('GET', path, false) // synchronous
+        xhr.send()
+        
+        if (xhr.status === 200) {
+          const commandOptionsJson = xhr.responseText
+          console.log(`Successfully loaded config via XHR from: ${path}`)
+          this.config = JSON.parse(commandOptionsJson) as CommandsConfig
+          return this.config!
+        }
+      } catch (error) {
+        console.warn(`XHR failed for ${path}:`, error)
+      }
+    }
+    
+    console.error('All Electron config loading attempts failed')
+    throw new Error('Could not load config in Electron environment')
+  }
+
+  private static getEmptyConfig(): CommandsConfig {
+    return {
+      commands: {}
     }
   }
 
